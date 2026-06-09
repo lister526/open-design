@@ -1,0 +1,11 @@
+# Build / IDE artifacts (KMP/Compose)
+.gradle/
+build/
+*/build/
+.idea/
+*.iml
+local.properties
+.DS_Store
+xcuserdata/
+*.xcworkspace/xcuserdata/
+node_modules/
