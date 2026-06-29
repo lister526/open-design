@@ -3,43 +3,49 @@
 @tailwind utilities;
 
 @layer base {
+  /* ───────────── Light · Warm editorial (bone / deep ink / muted amber) ───────────── */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 30% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 30% 11%;
-    --primary: 224 90% 56%;
-    --primary-foreground: 0 0% 100%;
-    --accent: 167 84% 42%;
-    --accent-foreground: 0 0% 100%;
-    --muted: 220 16% 96%;
-    --muted-foreground: 220 12% 44%;
-    --border: 220 16% 90%;
-    --input: 220 16% 90%;
-    --ring: 224 90% 56%;
-    --success: 160 84% 39%;
-    --warning: 38 92% 50%;
-    --danger: 0 80% 60%;
-    --radius: 0.85rem;
+    --background: 39 50% 96%;        /* bone #fbf6ee */
+    --foreground: 28 18% 14%;        /* deep ink */
+    --card: 42 60% 99%;              /* off-white surface */
+    --card-foreground: 28 18% 14%;
+    --primary: 26 22% 16%;           /* ink (used as primary action) */
+    --primary-foreground: 42 60% 98%;
+    --accent: 24 51% 40%;            /* muted amber #9b5b32 */
+    --accent-foreground: 42 60% 98%;
+    --revenue: 155 42% 34%;          /* revenue green */
+    --revenue-foreground: 42 60% 98%;
+    --muted: 38 32% 92%;             /* soft bone tint */
+    --muted-foreground: 30 10% 42%;
+    --border: 32 24% 84%;            /* hairline warm */
+    --input: 32 24% 84%;
+    --ring: 24 51% 40%;
+    --success: 155 42% 34%;
+    --warning: 32 70% 44%;
+    --danger: 8 58% 46%;
+    --radius: 0.9rem;
   }
 
+  /* ───────────── Dark · Warm charcoal ───────────── */
   .dark {
-    --background: 224 36% 6%;
-    --foreground: 210 30% 96%;
-    --card: 224 30% 9%;
-    --card-foreground: 210 30% 96%;
-    --primary: 222 95% 64%;
-    --primary-foreground: 224 40% 6%;
-    --accent: 167 78% 48%;
-    --accent-foreground: 224 40% 6%;
-    --muted: 223 22% 15%;
-    --muted-foreground: 218 14% 62%;
-    --border: 223 20% 18%;
-    --input: 223 20% 20%;
-    --ring: 222 95% 64%;
-    --success: 160 70% 45%;
-    --warning: 38 92% 55%;
-    --danger: 0 75% 62%;
+    --background: 28 14% 8%;
+    --foreground: 40 30% 92%;
+    --card: 28 12% 11%;
+    --card-foreground: 40 30% 92%;
+    --primary: 40 30% 92%;           /* light ink on dark */
+    --primary-foreground: 28 14% 9%;
+    --accent: 26 58% 56%;            /* warmer amber on dark */
+    --accent-foreground: 28 14% 9%;
+    --revenue: 152 40% 52%;
+    --revenue-foreground: 28 14% 9%;
+    --muted: 28 10% 16%;
+    --muted-foreground: 36 12% 62%;
+    --border: 30 10% 20%;
+    --input: 30 10% 22%;
+    --ring: 26 58% 56%;
+    --success: 152 40% 52%;
+    --warning: 32 70% 56%;
+    --danger: 8 62% 60%;
   }
 
   * { @apply border-border; }
@@ -49,22 +55,33 @@
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
   [dir='rtl'] body { text-align: right; }
+
+  /* Editorial serif for display headings */
+  .font-display {
+    font-family: var(--font-display), 'Georgia', 'Times New Roman', serif;
+    letter-spacing: -0.01em;
+  }
 }
 
 @layer utilities {
   .text-balance { text-wrap: balance; }
   .grid-noise {
-    background-image: radial-gradient(hsl(var(--foreground)/.04) 1px, transparent 1px);
+    background-image: radial-gradient(hsl(var(--foreground)/.05) 1px, transparent 1px);
     background-size: 22px 22px;
+  }
+  .paper-grain {
+    background-image:
+      radial-gradient(hsl(var(--accent)/.04) 1px, transparent 1px),
+      radial-gradient(hsl(var(--foreground)/.03) 1px, transparent 1px);
+    background-size: 26px 26px, 26px 26px;
+    background-position: 0 0, 13px 13px;
   }
   .scrollbar-none::-webkit-scrollbar { display: none; }
   .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
   .mask-fade-r { mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent); }
+  .hairline-t { border-top: 1px solid hsl(var(--border)); }
 }
 
-.gradient-text {
-  background: linear-gradient(100deg, hsl(var(--primary)), hsl(var(--accent)));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+.revenue-text {
+  color: hsl(var(--revenue));
 }

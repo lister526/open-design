@@ -8,6 +8,7 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'Georgia', 'Times New Roman', 'serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
@@ -31,6 +32,10 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        revenue: {
+          DEFAULT: 'hsl(var(--revenue))',
+          foreground: 'hsl(var(--revenue-foreground))',
+        },
         success: 'hsl(var(--success))',
         warning: 'hsl(var(--warning))',
         danger: 'hsl(var(--danger))',
@@ -43,8 +48,9 @@ const config: Config = {
         '2xl': 'calc(var(--radius) + 10px)',
       },
       boxShadow: {
-        soft: '0 1px 2px hsl(var(--foreground)/.04), 0 12px 32px -12px hsl(var(--foreground)/.12)',
-        glow: '0 0 0 1px hsl(var(--primary)/.16), 0 24px 64px -20px hsl(var(--primary)/.5)',
+        soft: '0 1px 2px hsl(28 18% 14% / .04), 0 14px 40px -18px hsl(28 18% 14% / .16)',
+        raised: '0 0 0 1px hsl(var(--border)), 0 20px 52px -20px hsl(28 18% 14% / .2)',
+        glow: '0 0 0 1px hsl(var(--accent)/.18), 0 22px 60px -22px hsl(var(--accent)/.45)',
       },
       keyframes: {
         'fade-up': { '0%': { opacity: '0', transform: 'translateY(14px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },

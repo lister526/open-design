@@ -23,8 +23,8 @@ export function Navbar() {
 
   const links = [
     { href: '/#how', label: t('nav.howItWorks') },
-    { href: '/#use-cases', label: t('nav.useCases') },
-    { href: '/#pricing', label: t('nav.pricing') },
+    { href: '/#cases', label: t('nav.cases') },
+    { href: '/#moat', label: t('nav.moat') },
     { href: '/partners', label: t('nav.partners') },
   ];
 

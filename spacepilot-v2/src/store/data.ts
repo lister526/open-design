@@ -36,7 +36,7 @@ export const useData = create<DataState>()(
         const next = [...s.leads]; next[idx] = l; return { leads: next };
       }),
       setStatus: (lid, status) => set((s) => ({ leads: s.leads.map((l) => (l.id === lid ? { ...l, status } : l)) })),
-      markPaidAudit: (lid) => set((s) => ({ leads: s.leads.map((l) => (l.id === lid ? { ...l, paidAudit: true, status: l.status === 'audited' || l.status === 'new' ? 'paid_audit' : l.status } : l)) })),
+      markPaidAudit: (lid) => set((s) => ({ leads: s.leads.map((l) => (l.id === lid ? { ...l, paidAudit: true, status: (l.status === 'audited' || l.status === 'new' || l.status === 'scanned') ? 'paid_audit' : l.status } : l)) })),
       getLead: (lid) => get().leads.find((l) => l.id === lid),
       addWaitlist: (e) => set((s) => ({ waitlist: [{ ...e, id: id('W'), createdAt: Date.now() }, ...s.waitlist] })),
       addPartnerApp: (a) => set((s) => ({ partnerApps: [{ ...a, id: id('P'), createdAt: Date.now() }, ...s.partnerApps] })),
