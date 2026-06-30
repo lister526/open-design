@@ -1,14 +1,17 @@
 'use client';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   ArrowRight, ShieldCheck, ScanLine, Stethoscope, Receipt, Truck,
-  IdCard, Network, Boxes, BadgeCheck, Camera, LineChart, ChevronRight,
+  IdCard, Network, Boxes, BadgeCheck, Camera, LineChart, ChevronRight, Check, MapPin,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/primitives';
+import { Card, Input } from '@/components/ui/primitives';
 import { SectionHead } from '@/components/ui/shared';
 import { Scanner } from './Scanner';
 import { useT, useMoney } from '@/store/prefs';
+import { useData } from '@/store/data';
 import { DEMO_CASES } from '@/lib/seed';
 import { cn } from '@/lib/cn';
 
@@ -174,12 +177,34 @@ function Moat() {
   );
 }
 
-/* ----------------------------- FINAL CTA ----------------------------- */
+/* ----------------------------- FINAL CTA + CITY WAITLIST ----------------------------- */
 function FinalCta() {
   const t = useT();
+  const params = useSearchParams();
+  const addWaitlist = useData((s) => s.addWaitlist);
+  const ref = useRef<HTMLDivElement>(null);
+  const [email, setEmail] = useState('');
+  const [city, setCity] = useState('');
+  const [joined, setJoined] = useState(false);
+
+  // Audit result links here with ?join=1 — scroll the waitlist into view.
+  useEffect(() => {
+    if (params.get('join') === '1' && ref.current) {
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [params]);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    addWaitlist({ email: email.trim(), kind: 'city', meta: city.trim() || undefined });
+    setJoined(true);
+    setEmail(''); setCity('');
+  }
+
   return (
     <section className="py-16 sm:py-24">
-      <div className="container">
+      <div className="container" ref={ref}>
         <Card className="relative overflow-hidden p-8 text-center shadow-raised sm:p-14">
           <div className="paper-grain pointer-events-none absolute inset-0 opacity-60" />
           <div className="relative mx-auto max-w-2xl">
@@ -189,7 +214,25 @@ function FinalCta() {
               <Link href="/audit"><Button size="lg" className="w-full sm:w-auto">{t('hero.ctaPrimary')} <ArrowRight className="h-4 w-4" /></Button></Link>
               <Link href="/proposal/demo"><Button size="lg" variant="outline" className="w-full sm:w-auto">{t('hero.ctaSecondary')}</Button></Link>
             </div>
-            <p className="mt-5 text-xs text-muted-foreground">{t('compliance.short')} {t('compliance.integrity')}</p>
+
+            <div className="mx-auto mt-8 max-w-md border-t border-border pt-7">
+              <p className="flex items-center justify-center gap-1.5 text-sm font-semibold text-muted-foreground">
+                <MapPin className="h-4 w-4 text-accent" /> {t('cta.waitlist')}
+              </p>
+              {joined ? (
+                <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-revenue/25 bg-revenue/5 px-4 py-3 text-sm font-semibold revenue-text">
+                  <Check className="h-4 w-4" /> {t('cta.joined')}
+                </div>
+              ) : (
+                <form onSubmit={submit} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder={t('scanner.city')} className="sm:max-w-[40%]" aria-label={t('scanner.city')} />
+                  <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" aria-label="Email" />
+                  <Button type="submit" variant="accent" className="shrink-0">{t('common.start')}</Button>
+                </form>
+              )}
+            </div>
+
+            <p className="mt-6 text-xs text-muted-foreground">{t('compliance.short')} {t('compliance.integrity')}</p>
           </div>
         </Card>
       </div>

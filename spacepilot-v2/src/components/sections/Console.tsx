@@ -34,7 +34,7 @@ export function Console() {
   const params = useSearchParams();
   const detail = params.get('demo') === '1' || params.get('admin') === '1';
   const money = useMoney();
-  const { leads, partnerApps, setStatus, reset } = useData();
+  const { leads, partnerApps, waitlist, setStatus, reset } = useData();
   const [tab, setTab] = useState<Tab>('overview');
 
   const stats = useMemo(() => {
@@ -112,7 +112,7 @@ export function Console() {
               ))}
             </div>
 
-            {tab === 'overview' && <Overview stats={stats} money={money} leads={leads} />}
+            {tab === 'overview' && <Overview stats={stats} money={money} leads={leads} waitlist={waitlist} />}
             {tab === 'pipeline' && <Pipeline leads={leads} money={money} setStatus={setStatus} />}
             {tab === 'leads' && <Leads leads={leads} money={money} setStatus={setStatus} />}
             {tab === 'suppliers' && <Suppliers money={money} />}
@@ -136,10 +136,23 @@ function Kpi({ icon, label, value, sub, accent }: any) {
 }
 
 /* ----------------------------- OVERVIEW ----------------------------- */
-function Overview({ stats, money, leads }: any) {
+function Overview({ stats, money, leads, waitlist }: any) {
   const top = [...leads].sort((a: Lead, b: Lead) => projectValue(b) - projectValue(a)).slice(0, 5);
   return (
     <div className="space-y-6">
+      {waitlist && waitlist.length > 0 && (
+        <Card className="flex items-center justify-between gap-3 border-accent/20 bg-accent/5 p-5">
+          <div>
+            <h2 className="text-lg font-bold">City launch waitlist <span className="text-accent">({waitlist.length})</span></h2>
+            <p className="text-sm text-muted-foreground">Inbound demand by market — prioritize launch cities by signup density.</p>
+          </div>
+          <div className="hidden flex-wrap justify-end gap-1.5 sm:flex">
+            {waitlist.slice(0, 6).map((w: any) => (
+              <span key={w.id} className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-muted-foreground">{w.meta || w.email}</span>
+            ))}
+          </div>
+        </Card>
+      )}
       <Card className="p-6">
         <h2 className="text-lg font-bold">Conversion funnel</h2>
         <div className="mt-5 space-y-3">
