@@ -122,7 +122,7 @@ export function Audit() {
         )}
 
         {phase === 'paywall' && lead && <Paywall lead={lead} money={money} paying={paying} onPay={pay} />}
-        {phase === 'result' && lead && <Result lead={lead} money={money} onProposal={() => router.push(`/proposal/${lead.id}`)} t={t} />}
+        {phase === 'result' && lead && <Result lead={lead} money={money} onProposal={() => router.push(`/proposal?id=${lead.id}`)} t={t} />}
 
         <div className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5 text-accent" /> {t('compliance.short')}

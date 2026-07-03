@@ -60,7 +60,7 @@ export function Proposal({ id }: { id: string }) {
     setTimeout(() => { if (!isDemo) setStatus(lead!.id, 'deposit_paid'); setPaying(false); setPhase('locked'); }, 1300);
   }
   function share() {
-    const url = `${window.location.origin}/proposal/${lead!.id}`;
+    const url = `${window.location.origin}/proposal?id=${lead!.id}`;
     navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); });
   }
   function exportSummary() {

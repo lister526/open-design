@@ -176,7 +176,7 @@ function Overview({ stats, money, leads, waitlist }: any) {
         <div className="border-b border-border p-5"><h2 className="text-lg font-bold">Top leads by project value</h2></div>
         <div className="divide-y divide-border">
           {top.map((l: Lead) => (
-            <Link key={l.id} href={`/proposal/${l.id}`} className="flex items-center justify-between gap-3 px-5 py-3.5 transition hover:bg-muted/40">
+            <Link key={l.id} href={`/proposal?id=${l.id}`} className="flex items-center justify-between gap-3 px-5 py-3.5 transition hover:bg-muted/40">
               <div className="min-w-0">
                 <div className="flex items-center gap-2"><span className="truncate text-sm font-bold">{l.input.city || l.input.country}</span><GradeBadge grade={l.passport.leak.grade} /></div>
                 <div className="truncate text-xs text-muted-foreground">{labelOf(USER_TYPES as any, l.input.userType)} · {l.input.email}</div>
@@ -220,7 +220,7 @@ function Pipeline({ leads, money, setStatus }: any) {
                     </div>
                     <div className="mt-3 flex items-center gap-1.5">
                       <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={idx <= 0} onClick={() => setStatus(l.id, PIPELINE[idx - 1])}>←</Button>
-                      <Link href={`/proposal/${l.id}`} className="flex-1"><Button variant="ghost" size="sm" className="h-7 w-full px-2 text-xs">Open</Button></Link>
+                      <Link href={`/proposal?id=${l.id}`} className="flex-1"><Button variant="ghost" size="sm" className="h-7 w-full px-2 text-xs">Open</Button></Link>
                       <Button size="sm" className="h-7 px-2 text-xs" disabled={idx >= PIPELINE.length - 1} onClick={() => setStatus(l.id, PIPELINE[idx + 1])}>→</Button>
                     </div>
                   </Card>
@@ -264,7 +264,7 @@ function Leads({ leads, money, setStatus }: any) {
                     {PIPELINE.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                   </Select>
                 </td>
-                <td className="px-4 py-3 text-right"><Link href={`/proposal/${l.id}`} className="text-accent hover:underline">Open</Link></td>
+                <td className="px-4 py-3 text-right"><Link href={`/proposal?id=${l.id}`} className="text-accent hover:underline">Open</Link></td>
               </tr>
             ))}
           </tbody>
