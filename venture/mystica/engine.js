@@ -263,7 +263,76 @@ function reportPayload(chart){
   };
 }
 
+/* ============ 情侣/合伙人合盘 (Compatibility) ============ */
+// 五行生克关系评分 + 生肖三合六合 + 日主互动
+const ZODIAC_HARMONY={ // 六合(+) 与 相冲(-)
+  liuhe:[[0,1],[2,11],[3,10],[4,9],[5,8],[6,7]], // 子丑,寅亥,卯戌,辰酉,巳申,午未
+  chong:[[0,6],[1,7],[2,8],[3,9],[4,10],[5,11]]  // 子午,丑未,寅申,卯酉,辰戌,巳亥
+};
+function pairInList(a,b,list){return list.some(([x,y])=>(x===a&&y===b)||(x===b&&y===a));}
+function compatibility(chartA,chartB){
+  const elA=chartA.dayMaster.element, elB=chartB.dayMaster.element;
+  let score=50, notes=[];
+  // 日主五行互动
+  if(GEN_CYCLE[elA]===elB||GEN_CYCLE[elB]===elA){score+=22;notes.push("nourishing");}
+  else if(KE_CYCLE[elA]===elB||KE_CYCLE[elB]===elA){score-=8;notes.push("challenging-but-growth");}
+  else if(elA===elB){score+=10;notes.push("kindred");}
+  // 生肖
+  const zaIdx=ZODIAC_ANIMALS.indexOf(chartA.zodiac), zbIdx=ZODIAC_ANIMALS.indexOf(chartB.zodiac);
+  if(pairInList(zaIdx,zbIdx,ZODIAC_HARMONY.liuhe)){score+=18;notes.push("zodiac-harmony");}
+  if(pairInList(zaIdx,zbIdx,ZODIAC_HARMONY.chong)){score-=14;notes.push("zodiac-clash");}
+  // 五行互补: 一方最弱正是另一方最强
+  if(chartA.elements.weakest===chartB.elements.strongest){score+=10;notes.push("A-completed-by-B");}
+  if(chartB.elements.weakest===chartA.elements.strongest){score+=10;notes.push("B-completed-by-A");}
+  score=Math.max(12,Math.min(98,Math.round(score)));
+  return {score, notes, elementA:elA, elementB:elB,
+    verdict: score>=80?"soulmate":score>=62?"strong":score>=45?"workable":"karmic-lesson"};
+}
+
+/* ============ 五行补缺·起名 (Baby Naming) ============ */
+// 依据缺失五行推荐用字方向 (中文偏旁 + 英文名寓意)
+const NAME_ELEMENT_HINT={
+  Wood:{radicals:["木","艹","禾","竹"],en:["Ivy","Ash","Hazel","Silas","Oliver","Laurel"],meaning:"growth, resilience, vision"},
+  Fire:{radicals:["火","日","丶","光"],en:["Aiden","Sol","Clara","Blaze","Seraphina","Leo"],meaning:"warmth, passion, leadership"},
+  Earth:{radicals:["土","山","石","玉"],en:["Terra","Ezra","Petra","Stone","Gaia","Yuan"],meaning:"stability, wealth, trust"},
+  Metal:{radicals:["钅","金","刂","西"],en:["Silver","Kai","Steele","Rhea","Xin","Aurelia"],meaning:"clarity, discipline, honor"},
+  Water:{radicals:["氵","水","冫","雨"],en:["Marina","River","Nixie","Hai","Isla","Dylan"],meaning:"wisdom, flow, intuition"},
+};
+function namingAdvice(chart){
+  const need=chart.elements.weakest;
+  const second=Object.entries(chart.elements.count).sort((a,b)=>a[1]-b[1])[1][0];
+  return {primaryElement:need, secondaryElement:second,
+    hint:NAME_ELEMENT_HINT[need], secondaryHint:NAME_ELEMENT_HINT[second],
+    dayMaster:chart.dayMaster.element};
+}
+
+/* ============ 黄道吉日·择日 (Auspicious Date) ============ */
+// 给定活动类型和日期范围, 按日干支五行与用神匹配打分, 返回最佳日期
+const EVENT_FAVOR={ wedding:["Earth","Fire"], business:["Metal","Earth"], move:["Earth","Wood"], travel:["Water","Wood"], signing:["Metal","Water"] };
+function auspiciousDates(chart, eventType, startDate, days){
+  const favor=chart.favor.favorable; const evFav=EVENT_FAVOR[eventType]||favor;
+  const out=[];
+  for(let i=0;i<days;i++){
+    const d=new Date(startDate.getTime()+i*86400000);
+    const jdn=julianDay(d.getFullYear(),d.getMonth()+1,d.getDate());
+    const dStem=((jdn+9)%10+10)%10, dBranch=((jdn+1)%12+12)%12;
+    const el=STEM_ELEMENT[dStem];
+    let s=50;
+    if(favor.includes(el))s+=25;
+    if(evFav.includes(el))s+=20;
+    if(chart.favor.avoid.includes(el))s-=25;
+    // 避开与本命年支相冲
+    const yBranch=chart._raw.year.branch;
+    if(pairInList(dBranch,yBranch,ZODIAC_HARMONY.chong))s-=20;
+    if(pairInList(dBranch,yBranch,ZODIAC_HARMONY.liuhe))s+=12;
+    out.push({date:d.toISOString().slice(0,10), ganzhi:HEAVENLY_STEMS[dStem]+EARTHLY_BRANCHES[dBranch],
+      element:el, score:Math.max(10,Math.min(99,s))});
+  }
+  return out.sort((a,b)=>b.score-a.score).slice(0,7);
+}
+
 const api={buildChart,freeReport,reportPayload,westernSign,baziPillars,fiveElements,favorableElement,
+  compatibility,namingAdvice,auspiciousDates,NAME_ELEMENT_HINT,
   ELEMENT_CRYSTAL,DAY_MASTER_ARCHETYPE,ZODIAC_ANIMALS,WESTERN_SIGNS};
 if(typeof module!=="undefined"&&module.exports){module.exports=api;}
 if(root){root.MysticaEngine=api;}

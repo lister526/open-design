@@ -26,31 +26,29 @@
 
 **关键洞察：数字报告是钩子，实物护身符 + 择日 + 起名才是利润池。**
 
-## 二、已经做好的功能（全部可运行）
+## 二、已经做好的功能（全部可运行，已实战自测）
 
-- ✅ **精确八字引擎**（`engine.js`）：节气年柱/月柱、地支藏干加权五行、用神喜神、大运、流年、按五行缺失推荐护身符水晶。
-- ✅ **7 语言实时切换**（`i18n.js`）：英/中/西/葡/日/韩/**印地语**（覆盖全球+印度最大付费市场），无刷新切换、自动检测浏览器语言。
-- ✅ **AI 深度报告后端**（`server.js`）：付费后调用大模型生成 6 段个性化长报告，支持 7 种语言输出；无 key 时自动降级为高质量示例，永不白屏。
-- ✅ **一键社交分享图**（Canvas 生成 1080×1350 竖图）：病毒增长核心，用户把"你是 The Blazing Sun"精美卡片发到 TikTok/IG/小红书。
-- ✅ **6 个矩阵产品商店**（首页 #shop），按用户命盘动态个性化。
+- ✅ **精确八字引擎**（`engine.js`）：节气年柱/月柱、地支藏干加权五行、用神喜神、大运、流年、按五行缺失推荐护身符水晶；并内置**合盘 / 起名 / 择日**三大计算函数。
+- ✅ **7 语言实时切换**（`i18n.js`）：英/中/西/葡/日/韩/**印地语**（覆盖全球+印度最大付费市场），无刷新切换、自动检测浏览器语言。销售文案（价格锚定/紧迫/保证）与三大互动流程文案已本地化。
+- ✅ **AI 深度报告后端**（`server.js`）：付费后调用大模型生成 6 段个性化长报告，支持 7 种语言输出；无 key 时自动降级为高质量示例，永不白屏。**温暖赋能语气**（针对 Co-Star「冷酷吓人导致流失」的痛点做的差异化）。
+- ✅ **真实支付闭环**（`payment.js` + `server.js`）：Lemon Squeezy（推荐，MoR 自动代扣全球税）/ Stripe / demo 三模式，环境变量切换，含 checkout 创建、webhook 验签、订单查询、支付成功页 `success.html`。
+- ✅ **6 个矩阵产品商店** + **3 个互动付费流程**：合盘（双人排盘）、起名（宝宝信息）、择日（事件+日期区间）均可在前端弹窗即时出结果（先给试读，完整报告付费解锁）。
+- ✅ **邮箱名单捕获**（退出意图弹窗 + 定时兜底 → `/api/lead` → `leads.jsonl`）：弃单召回 / EDM 变现的种子。
+- ✅ **一键社交分享图**（Canvas 生成 1080×1350 竖图）：病毒增长核心。
+- ✅ **完整法务页**（`legal.html`）：隐私/条款/退款(7 天无理由)/免责/FAQ/关于/联系。
 - ✅ **144 个 SEO 长尾页**（`build-seo.js` → `/s/`）+ sitemap.xml + robots.txt：吃 Google 自然流量（"Leo Dragon personality"等）。
+- ✅ **一键部署配置**：`Dockerfile` / `vercel.json` / `render.yaml` / `railway.json` / `.env.example`。
 
 ## 三、如何上线（零代码）
 
-### 方式 A：纯静态部署（最简单，但没有 AI 深度报告后端）
-把 `mystica/` 拖到 **Cloudflare Pages / Vercel / Netlify**，`index.html` + 144 个 SEO 页立即生效。深度报告会走前端降级版。
+**完整分步手册见 [`DEPLOY.md`](./DEPLOY.md)（2~3 小时从零到能真实收款）。** 这里只给概览：
 
-### 方式 B：全栈部署（推荐，含 AI 报告）
-需要一个 Node 环境（Render / Railway / Fly.io 免费档即可）：
-1. 上传整个 `mystica/`
-2. 设环境变量 `OPENAI_API_KEY`（和可选 `OPENAI_BASE_URL`）
-3. 启动命令 `npm start`（跑 `server.js`，默认端口 8080）
+1. **选平台**：推荐 Railway / Render（有 Node 后端，最省心），连 GitHub 自动部署 `npm start`。
+2. **配 AI 密钥**：环境变量 `OPENAI_API_KEY`（不配也能跑，走高质量兜底报告）。
+3. **开通收款**：把 `PAYMENT_PROVIDER` 从 `demo` 改成 `lemonsqueezy`，在 Lemon 后台建产品、填 variant id + API Key + webhook secret（全在 `.env.example` 里列好了）。**改配置即可，无需改代码。**
+4. **绑域名**：填自定义域名，DNS 加一条 CNAME，HTTPS 自动配好。
 
-### 接入收款（这一步才开始赚钱）
-出海推荐 **Lemon Squeezy / Paddle**（自动代扣全球税、支持卡/PayPal），或 **Stripe**。
-1. 创建产品并复制 Checkout 链接。
-2. 打开 `app.js`，把 `LINKS` 里的 `YOUR-STORE...` 换成真实链接。
-3. 生产中：支付成功的 webhook 回调里再调用 `/api/report` 交付报告（现在演示版是点击即交付）。
+> demo 模式下：点「解锁深度报告」会自动跳转 `success.html` 并展示真实报告，方便你先跑广告测转化，赚到钱再配真密钥/真收款。
 
 ## 四、增长打法（如何搞到流量 → 过亿的路径）
 
@@ -75,21 +73,31 @@
 
 ```
 mystica/
-├── index.html      # 落地页（i18n + 表单 + 结果 + 付费墙 + 商店 + 分享）
-├── engine.js       # 精确八字/星座计算引擎
-├── i18n.js         # 7 语言文案
-├── app.js          # 前端交互 / 深度报告调用 / 分享图 / 商店
-├── server.js       # Node 后端（AI 报告 + 每日运势 + 静态托管）
-├── build-seo.js    # 生成 144 个 SEO 页 + sitemap
-├── s/              # 144 个 SEO 长尾落地页（自动生成）
-├── sitemap.xml / robots.txt
-├── favicon.svg
+├── index.html        # 落地页（i18n + 表单 + 结果 + 付费墙 + 商店 + 退出弹窗 + 分享）
+├── success.html      # 支付成功页（凭 token 拉订单 → 生成/展示深度报告）
+├── legal.html        # 隐私/条款/退款/免责/FAQ/关于/联系
+├── engine.js         # 八字/星座计算引擎（含合盘/起名/择日）
+├── i18n.js           # 7 语言文案（含销售文案 + 互动流程）
+├── app.js            # 前端交互 / 深度报告 / 三大互动流程 / 支付 / 邮箱捕获 / 分享图 / 商店
+├── server.js         # Node 后端（AI 报告 + 合盘/起名/择日 + 支付 + 邮箱 + 静态托管）
+├── payment.js        # 支付抽象（Lemon Squeezy / Stripe / demo）
+├── build-seo.js      # 生成 144 个 SEO 页 + sitemap
+├── s/                # 144 个 SEO 长尾落地页（自动生成）
+├── sitemap.xml / robots.txt / favicon.svg
+├── .env.example      # 全部环境变量模板（收款/AI/分析/邮件）
+├── Dockerfile / .dockerignore
+├── vercel.json / render.yaml / railway.json   # 一键部署配置
+├── DEPLOY.md         # 零代码上线手册
+├── LAUNCH_PLAN.md    # 6 个月赚千万级的增长/盈利作战手册
 └── README.md
 ```
 
-## 八、下一步（说一句我就做）
+## 八、增长 & 盈利路线
+详见 **[`LAUNCH_PLAN.md`](./LAUNCH_PLAN.md)**：单位经济模型、6 个月阶段目标、为什么这个产品有「上亿」天花板、上线首周 7 件事、合规风控。
+
+## 九、下一步（说一句我就做）
 - [ ] 接入 Swiss Ephemeris 做分秒级精确排盘
-- [ ] 情侣合盘 / 起名 / 择日 的独立计算与页面
-- [ ] 用户账户 + 订阅计费闭环（Stripe/LemonSqueezy webhook）
-- [ ] AI 生成分享文案 + 自动发布短视频脚本
+- [ ] 用户账户 + 数据库（D1/Postgres）替换内存订单表
+- [ ] 弃单邮件自动召回 + 分销/联盟裂变
+- [ ] AI 生成短视频脚本 + 自动发布
 - [ ] 更多语言（阿拉伯语、印尼语、越南语等新兴玄学市场）
