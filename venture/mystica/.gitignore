@@ -8,3 +8,4 @@ leads.jsonl
 .dev.vars
 .wrangler/
 dist/
+data/

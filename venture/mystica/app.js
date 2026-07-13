@@ -4,6 +4,48 @@
 const E = window.MysticaEngine, I = window.MysticaI18N;
 let lang = I.detect();
 let currentChart = null;
+let PRICING = null;   // localized price map from /api/pricing (per-market currency + payment methods)
+let MARKET = null;    // resolved market code (US/IN/BR/...)
+
+/* ---------- referral capture (viral growth loop) ---------- */
+const REF = (function(){
+  try{
+    const u=new URL(window.location.href);
+    let r=u.searchParams.get('ref');
+    if(r){ localStorage.setItem('myst_ref', r); fetch('/api/referral/click',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:r})}).catch(()=>{}); }
+    return r || localStorage.getItem('myst_ref') || null;
+  }catch(_){ return null; }
+})();
+
+/* ---------- localized pricing (PPP + local payment methods) ---------- */
+async function loadPricing(){
+  try{
+    const r=await fetch('/api/pricing?lang='+encodeURIComponent(lang));
+    const data=await r.json();
+    if(data&&data.prices){ PRICING=data.prices; MARKET=data.market; }
+  }catch(_){ PRICING=null; }
+  renderShop();
+  applyDynamicPrices();
+}
+function priceStr(product){ // localized "now" price string, fallback to i18n anchor
+  if(PRICING&&PRICING[product]) return PRICING[product].display;
+  return I.t(lang,'price_now')||'$19';
+}
+function wasStr(product){
+  if(PRICING&&PRICING[product]) return PRICING[product].displayWas;
+  return I.t(lang,'price_was')||'$39';
+}
+function methodsStr(product){ // top local payment methods, e.g. "UPI · Card"
+  if(PRICING&&PRICING[product]&&PRICING[product].methods)
+    return PRICING[product].methods.slice(0,3).map(x=>x.label).join(' · ');
+  return '';
+}
+function applyDynamicPrices(){
+  // update paywall price anchor if present
+  const pn=document.querySelector('[data-price="deep-now"]'); if(pn) pn.textContent=priceStr('deep');
+  const pw=document.querySelector('[data-price="deep-was"]'); if(pw) pw.textContent=wasStr('deep');
+  const pm=document.querySelector('[data-price="deep-methods"]'); if(pm){const s=methodsStr('deep'); pm.textContent=s?('🔒 '+s):I.t(lang,'secure');}
+}
 
 /* ---------- starfield ---------- */
 const sf=document.getElementById('stars');
@@ -20,6 +62,7 @@ const langSel=document.getElementById('langSel');
 I.LANG_ORDER.forEach(code=>{const o=document.createElement('option');o.value=code;o.textContent=I.I18N[code].label;langSel.appendChild(o);});
 langSel.value=lang;
 langSel.addEventListener('change',()=>{lang=langSel.value;localStorage.setItem('myst_lang',lang);applyI18n();
+  loadPricing();
   if(currentChart) renderResult(currentChart);});
 const saved=localStorage.getItem('myst_lang'); if(saved&&I.I18N[saved]){lang=saved;langSel.value=lang;}
 
@@ -103,7 +146,7 @@ const PRODUCT_ALIAS={ deep:'deep', one:'deep', member:'member', sub:'member',
 async function checkout(productKey, extraMeta){
   const product=PRODUCT_ALIAS[productKey]||productKey;
   track('checkout_click',{product,lang});
-  const meta=Object.assign({ lang }, extraMeta||{});
+  const meta=Object.assign({ lang, market:MARKET, ref:REF }, extraMeta||{});
   // include the current chart payload so the success page can generate the deep report
   if(currentChart && (product==='deep'||product==='scroll'||product==='member')){
     try{ meta.payload=E.reportPayload(currentChart); }catch(_){}
@@ -153,6 +196,8 @@ const SHOP_ITEMS=lang=>{
   const el=currentChart?currentChart.luckyCrystal:{name:'Amethyst',cn:'紫水晶'};
   const weak=currentChart?currentChart.elements.weakest:'Water';
   return [
+    {product:'bracelet',action:'buy',icon:'📿',t:{en:`${el.name} Crystal Bracelet`,zh:`${el.cn}能量手链`,es:`Pulsera de ${el.name}`,pt:`Pulseira de ${el.name}`,ja:`${el.name} ブレスレット`,ko:`${el.name} 팔찌`,hi:`${el.name} क्रिस्टल ब्रेसलेट`},
+      d:{en:`Everyday-wear crystal beads tuned to your missing ${weak} element.`,zh:`日常佩戴的能量珠链,补你命盘所缺「${weak==='Water'?'水':weak}」。`,es:`Cuentas de cristal para tu elemento ${weak}.`,pt:`Contas de cristal para seu elemento ${weak}.`,ja:`不足する五行を補う普段使いの天然石。`,ko:`부족한 오행을 채우는 데일리 천연석.`,hi:`रोज़ पहनने योग्य क्रिस्टल, आपके अभाव तत्व हेतु।`},p:'$35',tag:'Best value'},
     {product:'amulet',action:'buy',icon:'💎',t:{en:`Custom ${el.name} Amulet`,zh:`定制${el.cn}护身符`,es:`Amuleto de ${el.name}`,pt:`Amuleto de ${el.name}`,ja:`${el.name} お守り`,ko:`${el.name} 부적`,hi:`कस्टम ${el.name} ताबीज़`},
       d:{en:`Hand-strung to replenish your missing ${weak} element.`,zh:`按你命盘所缺「${weak==='Water'?'水':weak}」手工串制。`,es:`Hecho a mano para tu elemento ${weak}.`,pt:`Feito à mão para seu elemento ${weak}.`,ja:`不足する五行を補う手作り。`,ko:`부족한 오행을 채우는 수제.`,hi:`आपके अभाव तत्व हेतु हस्तनिर्मित।`},p:'$79',tag:'Bestseller'},
     {product:'compat',action:'compat',icon:'💍',t:{en:'Couple Compatibility',zh:'情侣合盘',es:'Compatibilidad de Pareja',pt:'Compatibilidade do Casal',ja:'相性鑑定',ko:'궁합 리딩',hi:'युगल अनुकूलता'},
@@ -169,16 +214,28 @@ const SHOP_ITEMS=lang=>{
 };
 function renderShop(){
   const grid=document.getElementById('shopGrid'); if(!grid)return;
-  grid.innerHTML=SHOP_ITEMS(lang).map((it,i)=>`
+  grid.innerHTML=SHOP_ITEMS(lang).map((it,i)=>{
+    const pr=PRICING&&PRICING[it.product];
+    const now=pr?pr.display:it.p;
+    const was=pr?pr.displayWas:'';
+    const rec=pr&&pr.recurring;
+    const mth=pr&&pr.methods?pr.methods.slice(0,2).map(x=>x.label).join(' · '):'';
+    return `
     <div class="glass rounded-2xl p-6 flex flex-col hover:border-[var(--gold)]/60 transition">
       <div class="flex items-start justify-between"><div class="text-3xl mb-3">${it.icon}</div>
         ${it.tag?`<span class="text-[10px] uppercase tracking-wider bg-gold text-black px-2 py-1 rounded-full">${it.tag}</span>`:''}</div>
       <h3 class="serif text-xl gold mb-2">${it.t[lang]||it.t.en}</h3>
       <p class="text-sm text-purple-200/70 flex-1 mb-4">${it.d[lang]||it.d.en}</p>
       <div class="flex items-center justify-between">
-        <span class="serif text-2xl">${it.p}</span>
+        <div class="flex flex-col">
+          <div class="flex items-baseline gap-2">
+            <span class="serif text-2xl">${now}${rec?('/'+ (I.t(lang,'per_month')||'mo')):''}</span>
+            ${was?`<span class="text-xs text-purple-300/40 line-through">${was}</span>`:''}
+          </div>
+          ${mth?`<span class="text-[10px] text-purple-300/45 mt-0.5">${mth}</span>`:''}
+        </div>
         <button onclick="Mystica.shopAction('${it.action}','${it.product}')" class="text-sm border border-[var(--gold)] gold px-4 py-2 rounded-full hover:bg-gold hover:text-black transition">${I.t(lang,'buy_btn')}</button>
-      </div></div>`).join('');
+      </div></div>`;}).join('');
 }
 
 /* ---------- SHOP ACTION ROUTER ---------- */
@@ -268,7 +325,7 @@ function renderCompatResult(m,rep,score){
       <p class="text-sm text-purple-100/80 mt-1">${(rep&&rep.score_line)||s.verdict||''}</p></div>
     ${teaser?`<div class="glass rounded-xl p-4 mb-2"><h4 class="serif text-lg gold mb-1">${teaser.emoji||''} ${teaser.heading||''}</h4><p class="text-sm text-purple-100/80">${teaser.body||''}</p></div>`
       :(s.notes||[]).map(n=>`<div class="glass rounded-xl p-3 mb-2 text-sm text-purple-100/80">${n}</div>`).join('')}
-    <button onclick="Mystica.checkout('compat')" class="w-full bg-gold text-black font-semibold py-3 rounded-xl mt-3">${I.t(lang,'flow_unlock_full')} — $29</button>`);
+    <button onclick="Mystica.checkout('compat')" class="w-full bg-gold text-black font-semibold py-3 rounded-xl mt-3">${I.t(lang,'flow_unlock_full')} — ${priceStr('compat')}</button>`);
 }
 
 /* ---------- NAMING flow ---------- */
@@ -312,7 +369,7 @@ function renderNamingResult(m,rep,advice){
     ${names.slice(0,3).map(n=>`<div class="glass rounded-xl p-3 mb-2 flex items-center justify-between">
         <span class="serif text-xl gold">${typeof n==='string'?n:(n.name||'')}</span>
         <span class="text-xs text-purple-200/60">${typeof n==='object'?(n.meaning||''):''}</span></div>`).join('')}
-    <button onclick="Mystica.checkout('naming')" class="w-full bg-gold text-black font-semibold py-3 rounded-xl mt-3">${I.t(lang,'flow_unlock_full')} — $49</button>`);
+    <button onclick="Mystica.checkout('naming')" class="w-full bg-gold text-black font-semibold py-3 rounded-xl mt-3">${I.t(lang,'flow_unlock_full')} — ${priceStr('naming')}</button>`);
 }
 
 /* ---------- AUSPICIOUS DATES flow ---------- */
@@ -368,7 +425,7 @@ function renderDatesResult(m,dates){
     ${list.map((d,i)=>`<div class="glass rounded-xl p-3 mb-2 flex items-center justify-between">
       <span class="serif text-lg gold">${i+1}. ${d.date||d}</span>
       <span class="text-xs text-purple-200/60">${d.ganzhi?d.ganzhi+' · ':''}${d.score!=null?('★ '+d.score):''}</span></div>`).join('')}
-    <button onclick="Mystica.checkout('dates')" class="w-full bg-gold text-black font-semibold py-3 rounded-xl mt-3">${I.t(lang,'flow_unlock_full')} — $15</button>`);
+    <button onclick="Mystica.checkout('dates')" class="w-full bg-gold text-black font-semibold py-3 rounded-xl mt-3">${I.t(lang,'flow_unlock_full')} — ${priceStr('dates')}</button>`);
 }
 
 /* ---------- EXIT-INTENT + EMAIL LEAD CAPTURE ---------- */
@@ -391,13 +448,30 @@ function renderDatesResult(m,dates){
     const email=(new FormData(f).get('email')||'').trim();
     if(!email) return;
     localStorage.setItem('myst_lead','1');
+    let refCode=null;
     try{
-      await fetch('/api/lead',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({email,lang,chart:currentChart?E.reportPayload(currentChart):null,source:'exit_intent'})});
+      const r=await fetch('/api/lead',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email,lang,chart:currentChart?E.reportPayload(currentChart):null,source:'exit_intent',ref:REF})});
+      const d=await r.json(); refCode=d&&d.referralCode;
     }catch(_){}
     track('lead_captured',{lang});
-    f.innerHTML=`<p class="text-sm gold serif text-lg py-4">${I.t(lang,'email_thanks')}</p>`;
-    setTimeout(close,1800);
+    // viral loop: give them their share link right after opt-in
+    if(refCode){
+      const link=`${location.origin}/?ref=${refCode}`;
+      f.innerHTML=`
+        <p class="text-sm gold serif text-lg mb-3">${I.t(lang,'email_thanks')}</p>
+        <p class="text-xs text-purple-200/70 mb-2">${I.t(lang,'ref_invite')}</p>
+        <div class="flex gap-2">
+          <input readonly value="${link}" class="flex-1 bg-black/30 border border-purple-400/20 rounded-xl px-3 py-2 text-xs text-purple-100/80">
+          <button type="button" id="refCopy" class="bg-gold text-black text-xs font-semibold px-4 rounded-xl">${I.t(lang,'ref_copy')}</button>
+        </div>`;
+      const cp=f.querySelector('#refCopy');
+      if(cp) cp.onclick=()=>{ navigator.clipboard&&navigator.clipboard.writeText(link); cp.textContent=I.t(lang,'ref_copied'); track('referral_copied',{lang}); };
+      setTimeout(close,6000);
+    } else {
+      f.innerHTML=`<p class="text-sm gold serif text-lg py-4">${I.t(lang,'email_thanks')}</p>`;
+      setTimeout(close,1800);
+    }
   });
 })();
 
@@ -466,4 +540,5 @@ window.Mystica={checkout,shopAction,shareResult,
   openCompat:openCompatFlow,openNaming:openNamingFlow,openDates:openDatesFlow};
 
 applyI18n();
+loadPricing();
 })();

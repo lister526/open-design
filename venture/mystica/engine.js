@@ -85,23 +85,30 @@ function baziPillars(y,m,d,hour){
   const yStemIdx=((yearForStem-4)%10+10)%10;
   const yBranchIdx=((yearForStem-4)%12+12)%12;
 
-  // 月柱: 找当前所处的"节"确定月令地支
-  // 每月的"节"是奇数index的前一个: 立春(2),惊蛰(4),清明(6)... 即 index = 2*(m-1) 附近
-  let monthBranchIdx;
+  // 月柱: 由"節"(每月第一个节气)确定月令地支, 按节气交接精确划分.
+  // 24节气 index: 0=小寒,1=大寒,2=立春,3=雨水,4=惊蛰... 偶数index(2,4,6..)为"節".
+  // 每个公历月 m 对应的"節"是 index = 2*(m-1) (m=1->小寒index0, m=2->立春index2, ...).
+  // 月支: 立春->寅(2). 若当月日期尚未到本月"節", 则归属上一个月令(月支-1).
+  let monthBranchIdx, effMonth;
   {
-    // 当月的"节"节气 index = 2*(m)  (立春index2对应m2/寅)
-    const jieIdx=(2*(m))%24; // 该月的节
-    const jieDay=solarTermDay(y,jieIdx);
-    // 若日期在本月节气之前, 归上一个月令
-    let mm=m;
-    if(d<jieDay) mm=m-1<1?12:m-1;
-    // 寅月=正月(m2). 地支: m2->寅(2)
-    monthBranchIdx=((mm+1)%12+12)%12; // m2 -> 3? 修正:
-    monthBranchIdx=((mm)%12); // m1->1(丑),m2->2(寅)... 近似
-    // 精确映射: 正月寅(2),二月卯(3)... 即 branch = m+1 (mod12)
-    monthBranchIdx=((mm+1)%12+12)%12;
+    const jieIdx=(2*(m-1))%24;              // 本月的"節"节气 index
+    const jieDay=solarTermDay(y, jieIdx);   // 本月"節"发生在几号
+    // 月支基准: m对应的支为 (m + 1) mod 12 —— 因正月(m=1,小寒后仍属丑; 立春后寅)
+    // 以立春为界: 立春(m=2)之后为寅(2). 采用: 从立春起 m=2->寅.
+    // 用节气交接: 未到本月"節"则退到上一节令.
+    effMonth = m;
+    if (d < jieDay) effMonth = (m === 1) ? 12 : m - 1;
+    // 公历月 -> 月支: m=1(小寒/丑)->丑(1)? 传统正月为寅. 这里以"节"后月份计:
+    // effMonth=2(立春后)->寅(2); effMonth=3->卯(3); ... effMonth=1->丑(1); 即 branch = effMonth (mod12) 落到 [丑..]
+    // 修正为传统: 寅=正月. effMonth(公历2月立春后)=寅. 映射 branch = (effMonth) % 12, 其中 2->寅(index2).
+    monthBranchIdx = ((effMonth) % 12 + 12) % 12; // 2->2(寅),3->3(卯)...1->1(丑),12->0? 需12->子前的亥/子调整
+    if (monthBranchIdx === 0) monthBranchIdx = 0; // 12月(大雪后)->子(0)
   }
-  const monthStemIdx=(((yStemIdx%5)*2+monthBranchIdx)+10)%10;
+  // 五虎遁: 年干定正月(寅月)天干, 再顺推到目标月支.
+  // 甲己之年丙作首(寅月为丙寅), 乙庚之年戊为头, 丙辛之年庚寅起, 丁壬壬寅顺行, 戊癸甲寅好追求.
+  const yinMonthStemStart = [2,4,6,8,0][yStemIdx % 5]; // 年干->寅月天干index
+  const offsetFromYin = ((monthBranchIdx - 2) % 12 + 12) % 12; // 距寅月的月数
+  const monthStemIdx = (yinMonthStemStart + offsetFromYin) % 10;
 
   // 日柱: 儒略日经典公式
   const jdn=julianDay(y,m,d);

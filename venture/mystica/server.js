@@ -13,6 +13,8 @@ const fs = require("fs");
 const os = require("os");
 const yaml = require("js-yaml");
 const pay = require("./payment.js");
+const pricing = require("./pricing.js");
+const store = require("./store.js");
 
 const app = express();
 // webhook 需要原始 body 校验签名, 单独用 raw parser
@@ -207,18 +209,38 @@ function fallbackNaming(adv) {
     closing: "A good name is a quiet blessing the child carries for life." };
 }
 
+/* ---- 本地化定价 (PPP + 本地支付方式) ----
+ * 前端启动/切语言时拉取, 得到该市场的货币/价格/支付方式.
+ * country 可选 (由前端 geo 或用户选择传入); 缺省按 lang 推断主市场.
+ */
+app.get("/api/pricing", (req, res) => {
+  const lang = (req.query.lang || "en").toString();
+  const country = req.query.country ? req.query.country.toString().toUpperCase() : null;
+  try {
+    const all = pricing.localizeAll(lang, country);
+    const market = pricing.marketFor(lang, country);
+    res.json({ ok: true, lang, market, prices: all });
+  } catch (e) {
+    res.status(500).json({ error: "pricing_failed", detail: e.message });
+  }
+});
+
 /* ---- 支付: 创建 checkout ---- */
 app.post("/api/checkout", async (req, res) => {
   const { product, meta } = req.body || {};
   if (!pay.PRODUCTS[product]) return res.status(400).json({ error: "unknown product" });
   const origin = `${req.protocol}://${req.get("host")}`;
+  const lang = (meta && meta.lang) || "en";
+  const country = (meta && meta.country) || null;
+  const local = pricing.localize(product, lang, country); // 本地化价格快照
   try {
     const out = await pay.createCheckout({
-      product, meta,
+      product,
+      meta: { ...meta, pricing: local },
       successUrl: `${origin}/success.html`,
       cancelUrl: `${origin}/#shop`,
     });
-    res.json(out);
+    res.json({ ...out, pricing: local });
   } catch (e) {
     console.error("checkout error:", e.message);
     res.status(500).json({ error: "checkout_failed", detail: e.message });
@@ -249,13 +271,48 @@ app.get("/api/order/:token", (req, res) => {
 /* ---- 邮件捕获 (弃单召回 / 名单) ---- */
 const LEADS = path.join(__dirname, "leads.jsonl");
 app.post("/api/lead", (req, res) => {
-  const { email, source, lang } = req.body || {};
+  const { email, source, lang, chart } = req.body || {};
   if (!email || !/.+@.+\..+/.test(email)) return res.status(400).json({ error: "invalid_email" });
   try { fs.appendFileSync(LEADS, JSON.stringify({ email, source, lang, ts: Date.now() }) + "\n"); } catch (_) {}
-  res.json({ ok: true });
+  // 落成用户 + 生成专属推荐码 (增长引擎入口)
+  let refCode = null;
+  try { const u = store.upsertUser(email, { lang, chart }); refCode = u && u.referralCode; } catch (_) {}
+  res.json({ ok: true, referralCode: refCode });
 });
 
-app.get("/api/health", (_, res) => res.json({ ok: true, hasKey: !!getClient(), provider: pay.PROVIDER }));
+/* ---- 增长引擎: 推荐 (referral) ----
+ *   /api/referral/:code   -> 记录一次点击 (落地页带 ?ref=CODE 时前端调用)
+ *   /api/referral/stats/:code -> 推荐人查看自己的成绩 (点击/转化/获得额度)
+ * 奖励逻辑: 每成功带来一笔付费转化, 推荐人 +1 次免费深度报告额度 (store 内自动记).
+ */
+app.get("/api/referral/stats/:code", (req, res) => {
+  const s = store.referralStats(req.params.code);
+  if (!s) return res.status(404).json({ error: "not_found" });
+  res.json({ ok: true, ...s });
+});
+app.post("/api/referral/click", (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: "missing_code" });
+  const r = store.countReferralClick(code);
+  res.json({ ok: !!r });
+});
+
+/* ---- 我的账户: 凭邮箱查用户 (额度/推荐码/命盘) ---- */
+app.get("/api/me", (req, res) => {
+  const email = (req.query.email || "").toString();
+  const u = store.getUser(email);
+  if (!u) return res.status(404).json({ error: "not_found" });
+  res.json({ ok: true, email: u.email, credits: u.credits || 0, referralCode: u.referralCode, lang: u.lang });
+});
+
+/* ---- 内部: 营收概览 (运营看板; 生产应加鉴权) ---- */
+app.get("/api/admin/revenue", (req, res) => {
+  if (process.env.ADMIN_TOKEN && req.query.token !== process.env.ADMIN_TOKEN)
+    return res.status(403).json({ error: "forbidden" });
+  res.json({ ok: true, ...store.revenueSummary() });
+});
+
+app.get("/api/health", (_, res) => res.json({ ok: true, hasKey: !!getClient(), provider: pay.PROVIDER, persisted: true }));
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => console.log("Mystica running on :" + PORT));

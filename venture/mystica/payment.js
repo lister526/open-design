@@ -14,29 +14,28 @@
  *   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_<PRODUCT>
  */
 const crypto = require("crypto");
+const store = require("./store.js");
 
 const PROVIDER = process.env.PAYMENT_PROVIDER || "demo";
 
 // 产品目录 (价格用于展示; 真实扣款以支付平台配置为准)
 const PRODUCTS = {
-  deep:    { name: "Deep Reading",            usd: 19 },
-  compat:  { name: "Couple Compatibility",    usd: 29 },
-  naming:  { name: "Five-Element Baby Name",  usd: 49 },
-  dates:   { name: "Auspicious Date Picker",  usd: 15 },
-  scroll:  { name: "Annual Fortune Scroll",   usd: 59 },
-  amulet:  { name: "Custom Crystal Amulet",   usd: 79 },
-  member:  { name: "Cosmic Membership",       usd: 9, recurring: true },
+  mini:     { name: "Mini Deep Reading",       usd: 9 },
+  deep:     { name: "Deep Reading",            usd: 19 },
+  compat:   { name: "Couple Compatibility",    usd: 29 },
+  naming:   { name: "Five-Element Baby Name",  usd: 49 },
+  dates:    { name: "Auspicious Date Picker",  usd: 15 },
+  scroll:   { name: "Annual Fortune Scroll",   usd: 59 },
+  bracelet: { name: "Element Crystal Bracelet", usd: 35 },
+  amulet:   { name: "Custom Crystal Amulet",   usd: 79 },
+  member:   { name: "Cosmic Membership",       usd: 9, recurring: true },
 };
 
-// 内存订单表 (生产用 D1 / Postgres / KV 替换)
-const orders = new Map();
-function newOrder(product, meta) {
-  const token = crypto.randomBytes(16).toString("hex");
-  orders.set(token, { token, product, meta, paid: false, createdAt: Date.now() });
-  return token;
-}
-function markPaid(token) { const o = orders.get(token); if (o) { o.paid = true; o.paidAt = Date.now(); } return o; }
-function getOrder(token) { return orders.get(token); }
+// 订单持久化 (store.js -> JSON 文件, 重启不丢单; 可平滑替换 Postgres/KV)
+function newOrder(product, meta) { return store.createOrder(product, meta); }
+function markPaid(token) { return store.markOrderPaid(token); }
+function getOrder(token) { return store.getOrder(token); }
+const orders = store._db.orders; // 兼容旧引用
 
 async function createCheckout({ product, meta, successUrl, cancelUrl }) {
   const token = newOrder(product, meta);
@@ -76,6 +75,18 @@ async function createCheckout({ product, meta, successUrl, cancelUrl }) {
       metadata: { order_token: token },
     });
     return { token, url: session.url };
+  }
+
+  // 真实收单渠道路由 (由本地化定价决定应走哪个平台):
+  //   razorpay(印度UPI) / mercadopago(巴西Pix) 等区域渠道在此扩展.
+  //   当前若配置了对应渠道 env, 可在这里分流; 未配置则回落 demo.
+  const provider = meta?.pricing?.provider;
+  if (provider === "razorpay" && process.env.RAZORPAY_KEY_ID) {
+    // 占位: Razorpay Payment Link (支持 UPI). 需配置 RAZORPAY_KEY_ID/SECRET.
+    // 未实装真实调用时回落 demo, 保证流程不中断.
+  }
+  if (provider === "mercadopago" && process.env.MERCADOPAGO_ACCESS_TOKEN) {
+    // 占位: Mercado Pago Preference (支持 Pix). 需配置 MERCADOPAGO_ACCESS_TOKEN.
   }
 
   // demo: 无真实支付, 直接标记已付并回跳 (方便本地/演示)
