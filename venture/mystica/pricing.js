@@ -168,4 +168,6 @@ function localizeAll(lang, country){
   return out;
 }
 
-module.exports = { USD_ANCHOR, MARKETS, LANG_MARKET, METHOD_LABEL, localize, localizeAll, marketFor };
+const __pricingApi = { USD_ANCHOR, MARKETS, LANG_MARKET, METHOD_LABEL, localize, localizeAll, marketFor };
+if(typeof module!=="undefined"&&module.exports){ module.exports = __pricingApi; }
+if(typeof window!=="undefined"){ window.MysticaPricing = __pricingApi; }
