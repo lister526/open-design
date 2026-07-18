@@ -1,0 +1,20 @@
+{
+  "name": "meridian",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Meridian — an AI life-decision companion with an Eastern-astrology soul (Zi Wei Dou Shu + BaZi + luck cycles).",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787 --local --persist-to .wrangler/state",
+    "db:init": "wrangler d1 execute meridian-db --local --file=./migrations/0001_init.sql --persist-to .wrangler/state",
+    "db:init:remote": "wrangler d1 execute meridian-db --remote --file=./migrations/0001_init.sql",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "lunar-javascript": "^1.7.7"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

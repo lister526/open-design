@@ -1,0 +1,23 @@
+name = "meridian"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets (the frontend SPA) served by the Worker
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# D1 database — the real backend persistence (users, charts, chat memory, subscriptions)
+[[d1_databases]]
+binding = "DB"
+database_name = "meridian-db"
+database_id = "PLACEHOLDER_WILL_BE_SET_ON_DEPLOY"
+
+# Secrets are set via `wrangler secret put` (never committed):
+#   OPENAI_API_KEY   — LLM for the AI companion
+#   OPENAI_BASE_URL  — optional custom base url
+#   JWT_SECRET       — session signing
+[vars]
+APP_NAME = "Meridian"
+LLM_MODEL = "gpt-4o-mini"
