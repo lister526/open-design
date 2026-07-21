@@ -12,7 +12,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "meridian-db"
-database_id = "PLACEHOLDER_WILL_BE_SET_ON_DEPLOY"
+database_id = "00000000-0000-0000-0000-000000000000"
 
 # Secrets are set via `wrangler secret put` (never committed):
 #   OPENAI_API_KEY   — LLM for the AI companion
@@ -20,4 +20,4 @@ database_id = "PLACEHOLDER_WILL_BE_SET_ON_DEPLOY"
 #   JWT_SECRET       — session signing
 [vars]
 APP_NAME = "Meridian"
-LLM_MODEL = "gpt-4o-mini"
+LLM_MODEL = "gpt-5-mini"
