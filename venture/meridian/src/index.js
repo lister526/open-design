@@ -3,27 +3,24 @@ import { cors } from 'hono/cors';
 import { buildChart } from './engine.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, uuid, refCode } from './auth.js';
 import { buildSystemPrompt, chat, extractMemories, advisorFallback } from './ai.js';
+import { requireJwtSecret, llmConfig } from './config.js';
+import { rateLimit, clientIp, MAX_MESSAGE_LEN, MAX_FIELD_LEN } from './ratelimit.js';
+import { PLANS, entitlementFor, getProvider } from './payments.js';
 
 const app = new Hono();
 app.use('/api/*', cors());
 
-// ---------- helpers ----------
 const now = () => Date.now();
 const json = (c, obj, status = 200) => c.json(obj, status);
+const clamp = (s, n) => (typeof s === 'string' ? s.slice(0, n) : s);
 
-function llmCfg(env) {
-  return {
-    apiKey: env.OPENAI_API_KEY,
-    baseURL: env.OPENAI_BASE_URL || 'https://www.genspark.ai/api/llm_proxy/v1',
-    model: env.LLM_MODEL || 'gpt-5-mini',
-  };
-}
-
+// ---- auth helper: NO dev-secret fallback (CRIT-2) ----
 async function auth(c) {
+  const secret = requireJwtSecret(c.env); // throws if missing/weak in prod
   const h = c.req.header('Authorization') || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if (!token) return null;
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret');
+  const payload = await verifyToken(token, secret);
   if (!payload) return null;
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE id=?').bind(payload.sub).first();
   return user || null;
@@ -35,54 +32,139 @@ async function logEvent(env, userId, name, props) {
       .bind(uuid(), userId, name, JSON.stringify(props || {}), now()).run();
   } catch {}
 }
+async function audit(env, actorId, role, action, target, meta) {
+  try {
+    await env.DB.prepare('INSERT INTO audit_logs (id,actor_id,actor_role,action,target,meta,created_at) VALUES (?,?,?,?,?,?,?)')
+      .bind(uuid(), actorId || null, role || null, action, target || null, JSON.stringify(meta || {}), now()).run();
+  } catch {}
+}
+
+// Global error guard so a thrown config error becomes a clean 500 (not a leak).
+app.onError((err, c) => {
+  const msg = err?.message || 'error';
+  const safe = msg.startsWith('FATAL') || msg.includes('JWT_SECRET') ? 'server_misconfigured' : 'internal_error';
+  return json(c, { error: safe }, 500);
+});
 
 // ---------- health ----------
 app.get('/api/health', (c) => json(c, { ok: true, app: c.env.APP_NAME || 'Meridian', ts: now() }));
 
 // ---------- auth ----------
 app.post('/api/auth/register', async (c) => {
-  const { email, password, name, referred_by } = await c.req.json().catch(() => ({}));
-  if (!email || !password || password.length < 6) return json(c, { error: '邮箱或密码不合法（密码≥6位）' }, 400);
+  const ip = clientIp(c);
+  const rl = rateLimit(`reg:${ip}`, { limit: 5, windowMs: 60_000 });
+  if (!rl.ok) return json(c, { error: 'rate_limited', retryAfter: rl.retryAfter }, 429);
+
+  const secret = requireJwtSecret(c.env);
+  let { email, password, name, referred_by } = await c.req.json().catch(() => ({}));
+  email = clamp((email || '').trim().toLowerCase(), MAX_FIELD_LEN);
+  name = clamp(name, MAX_FIELD_LEN);
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json(c, { error: 'invalid_email' }, 400);
+  if (!password || password.length < 8 || password.length > 200) return json(c, { error: 'weak_password', message: '密码需 8-200 位' }, 400);
+
   const exists = await c.env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
-  if (exists) return json(c, { error: '该邮箱已注册' }, 409);
+  if (exists) return json(c, { error: 'email_taken' }, 409);
+
   const id = uuid();
   const code = refCode();
   const bonus = referred_by ? 5 : 0;
   await c.env.DB.prepare(
-    'INSERT INTO users (id,email,password_hash,name,locale,plan,credits,referral_code,referred_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-  ).bind(id, email, await hashPassword(password), name || email.split('@')[0], 'zh', 'free', 3 + bonus, code, referred_by || null, now(), now()).run();
+    'INSERT INTO users (id,email,password_hash,name,locale,plan,credits,referral_code,referred_by,memory_opt_in,monthly_ai_quota,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+  ).bind(id, email, await hashPassword(password), name || email.split('@')[0], 'zh', 'free', 3 + bonus, code, referred_by || null, 0, 0, now(), now()).run();
   if (referred_by) {
     await c.env.DB.prepare('UPDATE users SET credits = credits + 3 WHERE referral_code=?').bind(referred_by).run();
   }
   await logEvent(c.env, id, 'signup', { referred: !!referred_by });
-  const token = await signToken({ sub: id }, c.env.JWT_SECRET || 'dev-secret');
+  const token = await signToken({ sub: id }, secret);
   return json(c, { token, user: { id, email, name: name || email.split('@')[0], plan: 'free', credits: 3 + bonus, referral_code: code } });
 });
 
 app.post('/api/auth/login', async (c) => {
-  const { email, password } = await c.req.json().catch(() => ({}));
+  const ip = clientIp(c);
+  const rl = rateLimit(`login:${ip}`, { limit: 10, windowMs: 60_000 });
+  if (!rl.ok) return json(c, { error: 'rate_limited', retryAfter: rl.retryAfter }, 429);
+
+  const secret = requireJwtSecret(c.env);
+  let { email, password } = await c.req.json().catch(() => ({}));
+  email = (email || '').trim().toLowerCase();
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
-  if (!user || !(await verifyPassword(password, user.password_hash))) return json(c, { error: '邮箱或密码错误' }, 401);
-  const token = await signToken({ sub: user.id }, c.env.JWT_SECRET || 'dev-secret');
+  // constant-ish: still run a hash compare on a dummy to reduce user-enumeration timing
+  const okPass = user ? await verifyPassword(password || '', user.password_hash) : await verifyPassword('x', 'pbkdf2$1$AA$AA').catch(() => false);
+  if (!user || !okPass) {
+    rateLimit(`loginfail:${ip}`, { limit: 5, windowMs: 300_000 });
+    return json(c, { error: 'invalid_credentials' }, 401);
+  }
+  const token = await signToken({ sub: user.id }, secret);
   return json(c, { token, user: { id: user.id, email: user.email, name: user.name, plan: user.plan, credits: user.credits, referral_code: user.referral_code } });
 });
 
 app.get('/api/me', async (c) => {
   const u = await auth(c);
   if (!u) return json(c, { error: 'unauthorized' }, 401);
-  return json(c, { user: { id: u.id, email: u.email, name: u.name, plan: u.plan, credits: u.credits, referral_code: u.referral_code } });
+  return json(c, { user: { id: u.id, email: u.email, name: u.name, plan: u.plan, credits: u.credits, referral_code: u.referral_code, memory_opt_in: !!u.memory_opt_in } });
+});
+
+// ---------- privacy: memory control (MED-9) ----------
+app.post('/api/me/memory-optin', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const { enabled } = await c.req.json().catch(() => ({}));
+  await c.env.DB.prepare('UPDATE users SET memory_opt_in=?, updated_at=? WHERE id=?').bind(enabled ? 1 : 0, now(), u.id).run();
+  await audit(c.env, u.id, 'user', 'memory_optin', u.id, { enabled: !!enabled });
+  return json(c, { ok: true, memory_opt_in: !!enabled });
+});
+app.get('/api/me/memories', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const { results } = await c.env.DB.prepare('SELECT id,kind,content,created_at FROM memories WHERE user_id=? ORDER BY created_at DESC').bind(u.id).all();
+  return json(c, { memories: results || [] });
+});
+app.delete('/api/me/memories/:id', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  await c.env.DB.prepare('DELETE FROM memories WHERE id=? AND user_id=?').bind(c.req.param('id'), u.id).run();
+  return json(c, { ok: true });
+});
+// Full data export (GDPR/PIPL-style)
+app.get('/api/me/export', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const charts = (await c.env.DB.prepare('SELECT * FROM charts WHERE user_id=?').bind(u.id).all()).results || [];
+  const convs = (await c.env.DB.prepare('SELECT * FROM conversations WHERE user_id=?').bind(u.id).all()).results || [];
+  const mems = (await c.env.DB.prepare('SELECT * FROM memories WHERE user_id=?').bind(u.id).all()).results || [];
+  const decisions = (await c.env.DB.prepare('SELECT * FROM decisions WHERE user_id=? AND deleted_at IS NULL').bind(u.id).all()).results || [];
+  const safe = { id: u.id, email: u.email, name: u.name, plan: u.plan, created_at: u.created_at };
+  return json(c, { user: safe, charts, conversations: convs, memories: mems, decisions });
+});
+// Account deletion
+app.delete('/api/me', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  for (const t of ['memories', 'messages', 'conversations', 'charts', 'decisions', 'subscriptions', 'orders']) {
+    // messages are cleaned via conversation ids
+    if (t === 'messages') {
+      await c.env.DB.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id=?)').bind(u.id).run().catch(() => {});
+    } else {
+      await c.env.DB.prepare(`DELETE FROM ${t} WHERE user_id=?`).bind(u.id).run().catch(() => {});
+    }
+  }
+  await c.env.DB.prepare('DELETE FROM users WHERE id=?').bind(u.id).run();
+  await audit(c.env, u.id, 'user', 'account_deleted', u.id, {});
+  return json(c, { ok: true });
 });
 
 // ---------- chart: compute (public preview) ----------
 app.post('/api/chart/compute', async (c) => {
+  const rl = rateLimit(`chart:${clientIp(c)}`, { limit: 20, windowMs: 60_000 });
+  if (!rl.ok) return json(c, { error: 'rate_limited', retryAfter: rl.retryAfter }, 429);
   const body = await c.req.json().catch(() => ({}));
   const { gender, date, time, place, longitude } = body;
-  if (!gender || !date) return json(c, { error: '缺少必要参数（性别、出生日期）' }, 400);
+  if (!gender || !date) return json(c, { error: 'missing_params' }, 400);
   try {
-    const chart = buildChart({ gender, date, time: time || '12:00', place: place || '', longitude: longitude ? Number(longitude) : 120 });
+    const chart = buildChart({ gender, date, time: time || '12:00', place: clamp(place || '', MAX_FIELD_LEN), longitude: longitude != null ? Number(longitude) : 120 });
     return json(c, { chart });
   } catch (e) {
-    return json(c, { error: '排盘失败：' + e.message }, 500);
+    return json(c, { error: 'compute_failed' }, 400);
   }
 });
 
@@ -92,12 +174,12 @@ app.post('/api/chart', async (c) => {
   if (!u) return json(c, { error: 'unauthorized' }, 401);
   const body = await c.req.json().catch(() => ({}));
   const { gender, date, time, place, longitude, label } = body;
-  if (!gender || !date) return json(c, { error: '缺少必要参数' }, 400);
-  const chart = buildChart({ gender, date, time: time || '12:00', place: place || '', longitude: longitude ? Number(longitude) : 120 });
+  if (!gender || !date) return json(c, { error: 'missing_params' }, 400);
+  const chart = buildChart({ gender, date, time: time || '12:00', place: clamp(place || '', MAX_FIELD_LEN), longitude: longitude != null ? Number(longitude) : 120 });
   const id = uuid();
   await c.env.DB.prepare(
     'INSERT INTO charts (id,user_id,label,gender,birth_date,birth_time,birth_place,longitude,computed,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
-  ).bind(id, u.id, label || 'self', gender, date, time || '12:00', place || '', longitude ? Number(longitude) : 120, JSON.stringify(chart), now()).run();
+  ).bind(id, u.id, clamp(label || 'self', MAX_FIELD_LEN), gender, date, time || '12:00', clamp(place || '', MAX_FIELD_LEN), longitude != null ? Number(longitude) : 120, JSON.stringify(chart), now()).run();
   await logEvent(c.env, u.id, 'chart_created', { chartId: id });
   return json(c, { id, chart });
 });
@@ -113,18 +195,133 @@ app.get('/api/chart/:id', async (c) => {
   const u = await auth(c);
   if (!u) return json(c, { error: 'unauthorized' }, 401);
   const row = await c.env.DB.prepare('SELECT * FROM charts WHERE id=? AND user_id=?').bind(c.req.param('id'), u.id).first();
-  if (!row) return json(c, { error: 'not found' }, 404);
+  if (!row) return json(c, { error: 'not_found' }, 404);
   return json(c, { id: row.id, chart: JSON.parse(row.computed) });
 });
 
-// ---------- conversations ----------
+// ---------- DECISION-OS (P1 core) ----------
+app.post('/api/decisions', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const b = await c.req.json().catch(() => ({}));
+  if (!b.title || !b.title.trim()) return json(c, { error: 'title_required' }, 400);
+  const id = uuid();
+  await c.env.DB.prepare(
+    `INSERT INTO decisions (id,user_id,title,statement,deadline_at,status,goals,values_rank,constraints,affordable_loss,reversibility,chart_id,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(id, u.id, clamp(b.title, 300), clamp(b.statement || '', MAX_MESSAGE_LEN), b.deadline_at || null, 'open',
+    JSON.stringify(b.goals || []), JSON.stringify(b.values_rank || []), JSON.stringify(b.constraints || []),
+    clamp(b.affordable_loss || '', MAX_FIELD_LEN), b.reversibility || null, b.chart_id || null, now(), now()).run();
+  await logEvent(c.env, u.id, 'decision_created', { id });
+  return json(c, { id });
+});
+
+app.get('/api/decisions', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const { results } = await c.env.DB.prepare('SELECT id,title,status,deadline_at,updated_at FROM decisions WHERE user_id=? AND deleted_at IS NULL ORDER BY updated_at DESC').bind(u.id).all();
+  return json(c, { decisions: results || [] });
+});
+
+app.get('/api/decisions/:id', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const id = c.req.param('id');
+  const d = await c.env.DB.prepare('SELECT * FROM decisions WHERE id=? AND user_id=? AND deleted_at IS NULL').bind(id, u.id).first();
+  if (!d) return json(c, { error: 'not_found' }, 404);
+  const options = (await c.env.DB.prepare('SELECT * FROM decision_options WHERE decision_id=? ORDER BY sort_order').bind(id).all()).results || [];
+  const evidence = (await c.env.DB.prepare('SELECT * FROM decision_evidence WHERE decision_id=?').bind(id).all()).results || [];
+  const actions = (await c.env.DB.prepare('SELECT * FROM decision_actions WHERE decision_id=?').bind(id).all()).results || [];
+  const reviews = (await c.env.DB.prepare('SELECT * FROM decision_reviews WHERE decision_id=?').bind(id).all()).results || [];
+  return json(c, { decision: d, options, evidence, actions, reviews });
+});
+
+app.post('/api/decisions/:id/options', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const id = c.req.param('id');
+  const d = await c.env.DB.prepare('SELECT id FROM decisions WHERE id=? AND user_id=?').bind(id, u.id).first();
+  if (!d) return json(c, { error: 'not_found' }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const oid = uuid();
+  await c.env.DB.prepare('INSERT INTO decision_options (id,decision_id,label,upside,downside,subjective_prob,worst_case,stop_loss,sort_order,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .bind(oid, id, clamp(b.label || '选项', 300), clamp(b.upside || '', MAX_MESSAGE_LEN), clamp(b.downside || '', MAX_MESSAGE_LEN), b.subjective_prob ?? null, clamp(b.worst_case || '', MAX_FIELD_LEN), clamp(b.stop_loss || '', MAX_FIELD_LEN), b.sort_order || 0, now()).run();
+  return json(c, { id: oid });
+});
+
+app.post('/api/decisions/:id/actions', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const id = c.req.param('id');
+  const d = await c.env.DB.prepare('SELECT id FROM decisions WHERE id=? AND user_id=?').bind(id, u.id).first();
+  if (!d) return json(c, { error: 'not_found' }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const aid = uuid();
+  await c.env.DB.prepare('INSERT INTO decision_actions (id,decision_id,content,owner,due_at,status,created_at) VALUES (?,?,?,?,?,?,?)')
+    .bind(aid, id, clamp(b.content || '', MAX_FIELD_LEN), clamp(b.owner || '', 100), b.due_at || null, 'todo', now()).run();
+  return json(c, { id: aid });
+});
+
+app.post('/api/decisions/:id/reviews', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const id = c.req.param('id');
+  const d = await c.env.DB.prepare('SELECT id FROM decisions WHERE id=? AND user_id=?').bind(id, u.id).first();
+  if (!d) return json(c, { error: 'not_found' }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const rid = uuid();
+  await c.env.DB.prepare('INSERT INTO decision_reviews (id,decision_id,review_at,outcome,satisfaction,advice_worked,notes,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .bind(rid, id, b.review_at || now(), clamp(b.outcome || '', MAX_MESSAGE_LEN), b.satisfaction ?? null, b.advice_worked ? 1 : 0, clamp(b.notes || '', MAX_MESSAGE_LEN), now()).run();
+  await c.env.DB.prepare('UPDATE decisions SET status=?, updated_at=? WHERE id=?').bind('reviewing', now(), id).run();
+  await logEvent(c.env, u.id, 'review_completed', { id });
+  return json(c, { id: rid });
+});
+
+// AI-assisted structured decision analysis (returns typed schema; falls back locally)
+app.post('/api/decisions/:id/analyze', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const id = c.req.param('id');
+  const d = await c.env.DB.prepare('SELECT * FROM decisions WHERE id=? AND user_id=?').bind(id, u.id).first();
+  if (!d) return json(c, { error: 'not_found' }, 404);
+
+  // quota gate (server-authoritative; atomic)
+  const gate = await consumeAiQuota(c.env, u);
+  if (!gate.ok) return json(c, { error: 'no_quota', message: '本期 AI 额度已用完', upgrade: true }, 402);
+
+  let chart = null;
+  if (d.chart_id) {
+    const row = await c.env.DB.prepare('SELECT computed FROM charts WHERE id=? AND user_id=?').bind(d.chart_id, u.id).first();
+    if (row) chart = JSON.parse(row.computed);
+  }
+  const cfg = llmConfig(c.env);
+  const structured = {
+    facts: [], user_stated_goals: safeJson(d.goals), constraints: safeJson(d.constraints),
+    assumptions: [], missing_information: [], options: [], evidence: [], counter_evidence: [],
+    risks: [], uncertainties: [], cultural_reflections: [], recommendations: [], actions: [],
+    stop_loss_conditions: [], follow_up_date: null, safety_flags: [],
+  };
+  // Local structured advisor (always available). LLM enrichment is optional & opt-in.
+  const local = advisorFallback({ chart, userMessage: `${d.title}\n${d.statement || ''}`, userName: u.name });
+  structured.recommendations.push(local);
+  structured.cultural_reflections.push(chart ? '以下解读为文化反思镜头，非现实因果保证，重大决策请结合真实信息与专业意见。' : '未绑定命盘，本次分析基于你提供的事实与目标。');
+  structured.actions.push('把这个决策拆成 2-3 个可在 7 天内验证的小行动');
+  structured.disclaimer = 'AI 与文化模块的输出用于辅助思考，不构成职业/投资/医疗/法律/婚姻的确定性建议。';
+  structured.degraded = !cfg;
+  await c.env.DB.prepare('UPDATE decisions SET status=?, updated_at=? WHERE id=?').bind('analyzing', now(), id).run();
+  return json(c, { analysis: structured });
+});
+
+function safeJson(s) { try { return JSON.parse(s || '[]'); } catch { return []; } }
+
+// ---------- conversations (retained from v1; hardened) ----------
 app.post('/api/conversations', async (c) => {
   const u = await auth(c);
   if (!u) return json(c, { error: 'unauthorized' }, 401);
   const { chart_id, topic, title } = await c.req.json().catch(() => ({}));
   const id = uuid();
   await c.env.DB.prepare('INSERT INTO conversations (id,user_id,chart_id,title,topic,created_at,updated_at) VALUES (?,?,?,?,?,?,?)')
-    .bind(id, u.id, chart_id || null, title || '新的咨询', topic || 'general', now(), now()).run();
+    .bind(id, u.id, chart_id || null, clamp(title || '新的咨询', 100), clamp(topic || 'general', 40), now(), now()).run();
   return json(c, { id });
 });
 
@@ -139,99 +336,165 @@ app.get('/api/conversations/:id/messages', async (c) => {
   const u = await auth(c);
   if (!u) return json(c, { error: 'unauthorized' }, 401);
   const conv = await c.env.DB.prepare('SELECT * FROM conversations WHERE id=? AND user_id=?').bind(c.req.param('id'), u.id).first();
-  if (!conv) return json(c, { error: 'not found' }, 404);
+  if (!conv) return json(c, { error: 'not_found' }, 404);
   const { results } = await c.env.DB.prepare('SELECT role,content,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC').bind(conv.id).all();
   return json(c, { messages: results || [] });
 });
 
-// ---------- the core: AI chat ----------
+// Atomic quota consumption for free credits AND paid monthly quota (fixes CRIT-3).
+async function consumeAiQuota(env, u) {
+  if (u.plan === 'free') {
+    const r = await env.DB.prepare("UPDATE users SET credits=credits-1, updated_at=? WHERE id=? AND plan='free' AND credits>0")
+      .bind(now(), u.id).run();
+    if ((r.meta?.changes || 0) > 0) return { ok: true, credits: Math.max(0, u.credits - 1) };
+    return { ok: false };
+  }
+  // paid: atomic increment of usage under quota
+  const r = await env.DB.prepare('UPDATE users SET ai_used_this_period=ai_used_this_period+1, updated_at=? WHERE id=? AND ai_used_this_period < monthly_ai_quota')
+    .bind(now(), u.id).run();
+  if ((r.meta?.changes || 0) > 0) return { ok: true };
+  return { ok: false };
+}
+
 app.post('/api/conversations/:id/chat', async (c) => {
   const u = await auth(c);
   if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const rl = rateLimit(`chat:${u.id}`, { limit: 20, windowMs: 60_000 });
+  if (!rl.ok) return json(c, { error: 'rate_limited', retryAfter: rl.retryAfter }, 429);
+
   const convId = c.req.param('id');
   const conv = await c.env.DB.prepare('SELECT * FROM conversations WHERE id=? AND user_id=?').bind(convId, u.id).first();
-  if (!conv) return json(c, { error: 'conversation not found' }, 404);
-  const { content } = await c.req.json().catch(() => ({}));
-  if (!content || !content.trim()) return json(c, { error: '消息不能为空' }, 400);
+  if (!conv) return json(c, { error: 'not_found' }, 404);
+  let { content } = await c.req.json().catch(() => ({}));
+  if (!content || !content.trim()) return json(c, { error: 'empty_message' }, 400);
+  content = clamp(content, MAX_MESSAGE_LEN); // input length cap (HIGH-5)
 
-  // credit gate for free users
-  if (u.plan === 'free' && u.credits <= 0) {
-    return json(c, { error: 'no_credits', message: '免费额度已用完，升级 Plus 可无限畅聊' }, 402);
-  }
+  // atomic quota gate BEFORE spending money on LLM
+  const gate = await consumeAiQuota(c.env, u);
+  if (!gate.ok) return json(c, { error: 'no_quota', message: '额度已用完，升级 Core 获取每月公平使用额度', upgrade: true }, 402);
 
-  // load chart
   let chart = null;
   if (conv.chart_id) {
     const row = await c.env.DB.prepare('SELECT computed FROM charts WHERE id=? AND user_id=?').bind(conv.chart_id, u.id).first();
     if (row) chart = JSON.parse(row.computed);
   }
-  // load memories + recent history
-  const mem = (await c.env.DB.prepare('SELECT kind,content FROM memories WHERE user_id=? ORDER BY weight DESC, created_at DESC LIMIT 12').bind(u.id).all()).results || [];
+  // memories only loaded if user opted in (MED-9)
+  const mem = u.memory_opt_in
+    ? ((await c.env.DB.prepare('SELECT kind,content FROM memories WHERE user_id=? ORDER BY weight DESC, created_at DESC LIMIT 12').bind(u.id).all()).results || [])
+    : [];
   const hist = (await c.env.DB.prepare('SELECT role,content FROM messages WHERE conversation_id=? ORDER BY created_at ASC').bind(convId).all()).results || [];
 
   const sys = buildSystemPrompt({ chart, memories: mem, userName: u.name, topic: conv.topic });
   const messages = [{ role: 'system', content: sys }, ...hist.slice(-16).map((m) => ({ role: m.role, content: m.content })), { role: 'user', content }];
 
-  const cfg = llmCfg(c.env);
-  let reply;
-  let usedFallback = false;
+  const cfg = llmConfig(c.env); // null unless explicitly configured + allowlisted (CRIT-4)
+  let reply, usedFallback = false;
   try {
-    if (!cfg.apiKey) throw new Error('no key');
+    if (!cfg) throw new Error('no_provider');
     reply = await chat({ ...cfg, messages });
     if (!reply || !reply.trim()) throw new Error('empty');
-  } catch (e) {
-    // Graceful degradation: chart-driven deterministic advisor (still personalized).
+  } catch {
     usedFallback = true;
     reply = advisorFallback({ chart, userMessage: content, userName: u.name });
   }
 
-  // persist
   const t = now();
   await c.env.DB.prepare('INSERT INTO messages (id,conversation_id,role,content,created_at) VALUES (?,?,?,?,?)').bind(uuid(), convId, 'user', content, t).run();
   await c.env.DB.prepare('INSERT INTO messages (id,conversation_id,role,content,created_at) VALUES (?,?,?,?,?)').bind(uuid(), convId, 'assistant', reply, t + 1).run();
   await c.env.DB.prepare('UPDATE conversations SET updated_at=?, title=CASE WHEN title=? THEN ? ELSE title END WHERE id=?')
     .bind(t, '新的咨询', content.slice(0, 18), convId).run();
-
-  // decrement credit for free plan
-  let credits = u.credits;
-  if (u.plan === 'free') {
-    credits = Math.max(0, u.credits - 1);
-    await c.env.DB.prepare('UPDATE users SET credits=? WHERE id=?').bind(credits, u.id).run();
-  }
   await logEvent(c.env, u.id, 'message_sent', { convId });
 
-  // async memory extraction (best-effort, non-blocking of response correctness)
-  if (!usedFallback) c.executionCtx?.waitUntil?.((async () => {
-    const facts = await extractMemories({ ...cfg, userMessage: content, assistantMessage: reply });
-    for (const f of facts) {
-      await c.env.DB.prepare('INSERT INTO memories (id,user_id,kind,content,weight,created_at) VALUES (?,?,?,?,?,?)')
-        .bind(uuid(), u.id, f.kind || 'preference', f.content, 1.0, now()).run().catch(() => {});
-    }
-  })());
+  // memory extraction ONLY if user opted in AND provider available (MED-9 + CRIT-4)
+  if (u.memory_opt_in && !usedFallback && cfg) {
+    c.executionCtx?.waitUntil?.((async () => {
+      const facts = await extractMemories({ ...cfg, userMessage: content, assistantMessage: reply });
+      for (const f of facts) {
+        await c.env.DB.prepare('INSERT INTO memories (id,user_id,kind,content,weight,created_at) VALUES (?,?,?,?,?,?)')
+          .bind(uuid(), u.id, f.kind || 'preference', f.content, 1.0, now()).run().catch(() => {});
+      }
+    })());
+  }
 
-  return json(c, { reply, credits, degraded: usedFallback });
+  // reflect remaining credits for free users
+  const fresh = await c.env.DB.prepare('SELECT credits FROM users WHERE id=?').bind(u.id).first();
+  return json(c, { reply, credits: fresh?.credits, degraded: usedFallback });
 });
 
-// ---------- billing (demo upgrade; wire Stripe later) ----------
-const PLANS = { plus: { price: 29, name: 'Plus 月度' }, pro: { price: 99, name: 'Pro 月度' } };
-app.post('/api/billing/upgrade', async (c) => {
-  const u = await auth(c);
-  if (!u) return json(c, { error: 'unauthorized' }, 401);
-  const { plan } = await c.req.json().catch(() => ({}));
-  if (!PLANS[plan]) return json(c, { error: 'invalid plan' }, 400);
-  const end = now() + 30 * 86400000;
-  await c.env.DB.prepare('INSERT INTO subscriptions (id,user_id,plan,status,provider,current_period_end,created_at) VALUES (?,?,?,?,?,?,?)')
-    .bind(uuid(), u.id, plan, 'active', 'demo', end, now()).run();
-  await c.env.DB.prepare('UPDATE users SET plan=?, credits=?, updated_at=? WHERE id=?').bind(plan, 9999, now(), u.id).run();
-  await c.env.DB.prepare('INSERT INTO orders (id,user_id,product,amount,currency,status,provider,created_at) VALUES (?,?,?,?,?,?,?,?)')
-    .bind(uuid(), u.id, plan, PLANS[plan].price, 'CNY', 'paid', 'demo', now()).run();
-  await logEvent(c.env, u.id, 'upgrade', { plan });
-  return json(c, { ok: true, plan });
-});
-
+// ---------- billing (NO backdoor; provider + webhook only) ----------
 app.get('/api/plans', (c) => json(c, { plans: PLANS }));
 
-// SPA fallback: let static assets binding serve everything else
+// Create a checkout intent → order stays 'pending'. Entitlement NOT granted here.
+app.post('/api/billing/checkout', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const { plan, provider } = await c.req.json().catch(() => ({}));
+  const p = PLANS[plan];
+  if (!p) return json(c, { error: 'invalid_plan' }, 400);
+  const prov = getProvider(c.env, provider || 'mock');
+  if (!prov) return json(c, { error: 'provider_unavailable', message: '该支付渠道需接入真实商户凭证' }, 400);
+  let intent;
+  try { intent = await prov.createCheckout({ plan }); }
+  catch (e) { return json(c, { error: 'checkout_failed', reason: e.message }, 400); }
+
+  const orderId = uuid();
+  await c.env.DB.prepare('INSERT INTO orders (id,user_id,product,amount,currency,status,provider,amount_minor,plan_code,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .bind(orderId, u.id, p.name, p.amount / 100, p.currency, 'pending', intent.provider, p.amount, p.code, now()).run();
+  await logEvent(c.env, u.id, 'checkout_created', { orderId, plan });
+  return json(c, { order_id: orderId, ...intent, note: 'Order is PENDING. Entitlement is granted only after a verified payment webhook.' });
+});
+
+// Payment webhook — the ONLY path that grants entitlement. Signature-verified + idempotent.
+app.post('/api/billing/webhook/:provider', async (c) => {
+  const providerName = c.req.param('provider');
+  const prov = getProvider(c.env, providerName);
+  if (!prov) return json(c, { error: 'provider_unavailable' }, 400);
+  const raw = await c.req.text();
+  const signature = c.req.header('x-signature') || c.req.header('x-webhook-signature') || '';
+  let payload;
+  try { payload = await prov.verifyWebhook(raw, signature); }
+  catch (e) { return json(c, { error: 'verify_failed', reason: e.message }, 400); }
+  if (!payload) return json(c, { error: 'invalid_signature' }, 401);
+
+  const { order_id, event_id } = payload;
+  if (!order_id) return json(c, { error: 'missing_order' }, 400);
+
+  // idempotency: process each event once
+  const idemKey = `pay:${providerName}:${event_id || order_id}`;
+  const dup = await c.env.DB.prepare('SELECT key FROM idempotency_keys WHERE key=?').bind(idemKey).first();
+  if (dup) return json(c, { ok: true, deduped: true });
+  await c.env.DB.prepare('INSERT INTO idempotency_keys (key,scope,created_at) VALUES (?,?,?)').bind(idemKey, 'payment', now()).run();
+
+  const order = await c.env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(order_id).first();
+  if (!order) return json(c, { error: 'order_not_found' }, 404);
+  // amount/currency cross-check (defense against tampering)
+  const plan = PLANS[order.plan_code];
+  if (!plan || payload.amount !== plan.amount || payload.currency !== plan.currency) {
+    return json(c, { error: 'amount_mismatch' }, 400);
+  }
+  if (order.status === 'paid') return json(c, { ok: true, already_paid: true });
+
+  await c.env.DB.prepare('UPDATE orders SET status=? WHERE id=?').bind('paid', order_id).run();
+  await c.env.DB.prepare('INSERT INTO payment_events (id,order_id,provider,event_type,amount,currency,raw,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .bind(uuid(), order_id, providerName, 'paid', plan.amount, plan.currency, JSON.stringify({ order_id, event_id }), now()).run();
+
+  // grant entitlement (server-authoritative)
+  const ent = entitlementFor(order.plan_code);
+  const periodEnd = now() + (plan.period === 'year' ? 365 : 30) * 86400000;
+  if (plan.kind === 'subscription') {
+    await c.env.DB.prepare('INSERT INTO subscriptions (id,user_id,plan,status,provider,current_period_end,created_at) VALUES (?,?,?,?,?,?,?)')
+      .bind(uuid(), order.user_id, order.plan_code, 'active', providerName, periodEnd, now()).run();
+    await c.env.DB.prepare('UPDATE users SET plan=?, monthly_ai_quota=?, ai_used_this_period=0, period_reset_at=?, updated_at=? WHERE id=?')
+      .bind(ent.plan, ent.monthlyAiQuota, periodEnd, now(), order.user_id).run();
+  } else {
+    // one-time pack: add credits
+    await c.env.DB.prepare('UPDATE users SET credits=credits+?, updated_at=? WHERE id=?').bind(ent.packCredits || 1, now(), order.user_id).run();
+  }
+  await audit(c.env, order.user_id, 'system', 'entitlement_granted', order_id, { plan: order.plan_code });
+  return json(c, { ok: true });
+});
+
+// SPA fallback
 app.get('*', async (c) => {
   if (c.env.ASSETS) return c.env.ASSETS.fetch(c.req.raw);
   return c.text('Meridian API', 200);

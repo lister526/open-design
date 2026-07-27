@@ -15,9 +15,16 @@ database_name = "meridian-db"
 database_id = "00000000-0000-0000-0000-000000000000"
 
 # Secrets are set via `wrangler secret put` (never committed):
-#   OPENAI_API_KEY   — LLM for the AI companion
-#   OPENAI_BASE_URL  — optional custom base url
-#   JWT_SECRET       — session signing
+#   JWT_SECRET         — session signing. NO fallback; app refuses to run without it in prod.
+#   OPENAI_API_KEY     — optional. LLM enrichment. If unset, app uses local advisor (no data leaves).
+#   OPENAI_BASE_URL    — optional. Required together with OPENAI_API_KEY to enable LLM.
+#   MOCK_WEBHOOK_SECRET— dev/test only, for the mock payment provider webhook.
 [vars]
 APP_NAME = "Meridian"
-LLM_MODEL = "gpt-5-mini"
+LLM_MODEL = "gpt-4o-mini"
+ENVIRONMENT = "development"
+# LLM endpoint allowlist (host only). Empty in dev = no host restriction, but LLM still
+# requires OPENAI_API_KEY + OPENAI_BASE_URL to be explicitly set (no silent default).
+LLM_ALLOWED_HOSTS = ""
+# Mock payment provider. MUST be unset/'disabled' in production.
+PAYMENTS_MOCK = "enabled"

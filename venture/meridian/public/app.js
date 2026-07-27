@@ -147,9 +147,9 @@ route('home', () => {
 // ---- pricing ----
 function pricingSection() {
   const plans = [
-    { k: 'free', name: '体验', price: '¥0', per: '', feats: ['精确排盘（八字+紫微）', '基础命盘解读', '3 次军师对话', '记住你的基本信息'], cta: '免费开始', act: () => state.user ? go('app') : openAuth('register'), feat: false },
-    { k: 'plus', name: 'Plus', price: '¥29', per: '/月', feats: ['无限军师对话', '完整大运流年推演', '长期记忆·越聊越懂', '事业/财富/关系/时机专题', '优先响应'], cta: '升级 Plus', act: () => upgrade('plus'), feat: true },
-    { k: 'pro', name: 'Pro', price: '¥99', per: '/月', feats: ['Plus 全部权益', '多张命盘（家人/伙伴/合盘）', '年度运势深度报告', '关键决策一对一深聊', '新功能抢先体验'], cta: '升级 Pro', act: () => upgrade('pro'), feat: false },
+    { k: 'free', name: '体验', price: '¥0', per: '', feats: ['排盘（八字+紫微，附置信度与免责）', '1 个决策工作区', '3 次 AI 决策分析', '文化反思镜头（可选开关）'], cta: '免费开始', act: () => state.user ? go('app') : openAuth('register'), feat: false },
+    { k: 'core_monthly', name: 'Core 月度', price: '¥59', per: '/月', feats: ['每月 300 次 AI 分析（公平使用）', '最多 20 个活跃决策', '选项对比 / 证据矩阵 / 风险矩阵', '行动计划 + 复盘提醒', '用户可控的长期记忆', '报告导出'], cta: '订阅 Core', act: () => upgrade('core_monthly'), feat: true },
+    { k: 'pack_single', name: 'Decision Pack', price: '¥199', per: '/次', feats: ['针对单个重大决策', '结构化深度报告', '完整行动方案', '30/90 天复盘机制'], cta: '购买单次', act: () => upgrade('pack_single'), feat: false },
   ];
   return el('section', { class: 'blk', id: 'pricing' }, el('div', { class: 'wrap' },
     el('div', { class: 'sec-head' },
@@ -175,11 +175,11 @@ function footer() {
 async function upgrade(plan) {
   if (!state.user) { openAuth('register'); return; }
   try {
-    await API.call('/billing/upgrade', { method: 'POST', body: { plan } });
-    const { user } = await API.call('/me'); state.user = user;
-    toast(`已升级到 ${plan === 'plus' ? 'Plus' : 'Pro'}，现在可无限畅聊`);
-    render();
-  } catch (e) { toast(e.message); }
+    // Creates a PENDING order via a payment provider. Entitlement is granted only
+    // after a verified payment webhook (no client-side upgrade). See SECURITY.md.
+    await API.call('/billing/checkout', { method: 'POST', body: { plan, provider: 'mock' } });
+    toast('已创建订单（待支付）。真实支付渠道需接入商户凭证；权益仅在支付回调验证后开通。');
+  } catch (e) { toast(e.message || '暂不可用'); }
 }
 
 // ---- auth modal ----
@@ -397,7 +397,7 @@ function renderChat() {
   const composer = el('div', { class: 'composer' }, state.messages.length ? null : suggest, form);
   const head = el('div', { class: 'chat-head' },
     el('div', { class: 't' }, state.conversations.find((c) => c.id === state.convId)?.title || '新的咨询'),
-    el('div', { class: 'credits' }, state.user.plan === 'free' ? `剩余 ${state.user.credits} 次免费对话` : `${state.user.plan === 'plus' ? 'Plus' : 'Pro'} · 无限畅聊`));
+    el('div', { class: 'credits' }, state.user.plan === 'free' ? `剩余 ${state.user.credits} 次免费分析` : `Core · 每月公平使用额度`));
   chat.append(head, msgs, composer);
   msgs.scrollTop = msgs.scrollHeight;
   setTimeout(() => ta.focus(), 50);
@@ -435,7 +435,7 @@ async function sendMessage(content) {
     typing.remove();
     if (e.status === 402) {
       const up = el('div', { class: 'msg assistant' }, el('div', { class: 'who' }, '子午'),
-        document.createTextNode('你的免费对话额度已用完。升级 Plus（¥29/月）即可无限畅聊，并解锁完整大运流年与长期记忆。'));
+        document.createTextNode('你的免费额度已用完。订阅 Core（¥59/月）获得每月公平使用额度，并解锁多个活跃决策与报告导出。'));
       if (msgs) msgs.append(up);
       setTimeout(() => go('pricing'), 400);
     } else {

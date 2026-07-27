@@ -315,6 +315,18 @@ export function buildChart({ gender, date, time, place = '', longitude = 120 }) 
     ageVirtual,
     ziwei: zw,
     computedAt: new Date().toISOString(),
+    // Cultural-lens metadata (ADR-001): NOT a deterministic causal engine.
+    meta: {
+      confidence: {
+        bazi: 'high',            // solar-term year boundary + true-solar-time via lunar-javascript
+        luck: 'high',            // 大运 driven by the library
+        ziwei: 'experimental',   // major stars only; minor stars & schools not fully modeled
+        favorable_elements: 'heuristic', // simplified strength ratio, not authoritative
+      },
+      trueSolarApplied: true,
+      rulesNote: '流派/规则版本简化；节气·闰月·历史时区回归测试集尚未完成。',
+      disclaimer: '本命盘用于文化反思与自我认知，不构成对职业、投资、医疗、法律、婚姻的确定性因果判断；重大决策请结合真实信息与专业意见。',
+    },
   };
 }
 
