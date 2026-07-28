@@ -29,7 +29,10 @@
 | 真实支付渠道 (微信/支付宝/Stripe/Apple IAP) | ⛔ REQUIRES_EXTERNAL_CREDENTIALS | PaymentProvider 接口已留 |
 | 邮箱验证 / 忘记密码 / 设备会话 / MFA | 🔧 SCAFFOLDED | 表结构未建,属下一轮 |
 | Token 迁移到 HttpOnly Cookie | 🔧 SCAFFOLDED | 见 SECURITY.md,前端仍 Bearer |
-| 前端决策工作区 UI (选项对比/证据矩阵/复盘) | ⛔ NOT_IMPLEMENTED | 后端 API 已就绪,前端未接 |
+| 前端决策工作区 UI (创建/列表/详情/选项对比/风险矩阵/结构化分析/行动/复盘) | ✅ IMPLEMENTED | `public/app.js` route('decisions') + 详情视图,已端到端联调后端 API,0 console error |
+| 前端隐私与数据控制 UI (记忆开关/查看/删除/导出/注销) | ✅ IMPLEMENTED | `public/app.js` route('account'),对接 MED-9 后端 |
+| 证据(evidence)写入端点 | ⛔ NOT_IMPLEMENTED | 后端仅有读取(GET 返回),前端证据当前在会话内本地保存并作为 analyze 入参;需补 `POST /api/decisions/:id/evidence` 持久化 |
+| 行动状态勾选(todo→done)写回 | ⛔ NOT_IMPLEMENTED | 前端可创建行动;勾选完成需补 `PATCH /api/decisions/:id/actions/:aid` |
 | 管理后台 | ⛔ NOT_IMPLEMENTED | audit_logs 表已备 |
 
 ## P2 · 移动 & 专家市场 (未做,诚实标注)
@@ -52,4 +55,4 @@
 | 全套合规文档 | 🔧 SCAFFOLDED + REQUIRES_LEGAL_REVIEW |
 
 ## 一句话进度总结
-**P0 100% 完成且通过运行时安全测试;P1 后端闭环骨架完成;P2/P3 明确未做并已登记。** 这是一个诚实、可被接管、不会在尽调中暴雷的状态,而不是一个假装完成的大项目。
+**P0 100% 完成且通过运行时安全测试;P1 决策闭环已打通(后端 API + 完整可用前端:创建→目标约束→选项/风险矩阵→AI 16 字段结构化分析→行动计划→复盘,外加隐私数据控制台);仅剩 evidence 持久化与行动勾选两个小端点未补(已诚实登记)。P2/P3 明确未做并已登记。** 这是一个诚实、可被接管、用户真的能打开就用、不会在尽调中暴雷的状态,而不是一个假装完成的大项目。

@@ -48,7 +48,8 @@ function ensureBackdrop() { if (!$('.stars')) document.body.prepend(el('div', { 
 // ---- nav ----
 function navBar() {
   const links = state.user
-    ? [el('a', { href: '#app' }, '对话'), el('a', { href: '#pricing' }, '会员'),
+    ? [el('a', { href: '#decisions' }, '决策台'), el('a', { href: '#app' }, '对话'),
+       el('a', { href: '#account' }, '隐私与数据'), el('a', { href: '#pricing' }, '会员'),
        el('a', { class: 'btn btn-ghost', onclick: logout }, '退出')]
     : [el('a', { href: '#features' }, '能力'), el('a', { href: '#how' }, '原理'), el('a', { href: '#pricing' }, '会员'),
        el('a', { class: 'btn btn-ghost', onclick: () => openAuth('login') }, '登录'),
@@ -226,8 +227,8 @@ function openAuth(mode) {
 function render() {
   ensureBackdrop();
   app().innerHTML = '';
-  const name = (location.hash || '#home').slice(1).split('?')[0] || 'home';
-  if ((name === 'app') && !state.user) { go('home'); return; }
+  const name = (location.hash || '#home').slice(1).split('?')[0].split('/')[0] || 'home';
+  if (['app', 'decisions', 'account'].includes(name) && !state.user) { go('home'); return; }
   const fn = routes[name] || routes['home'];
   // anchor sections live on home; for #features etc. render home then scroll
   if (['features', 'how', 'pricing'].includes(name)) {
@@ -325,6 +326,7 @@ function renderApp(container) {
   const side = el('div', { class: 'side' });
   side.append(
     el('button', { class: 'btn btn-gold new', onclick: () => startConversation() }, '＋ 新对话'),
+    el('button', { class: 'btn btn-ghost new', style: 'margin-bottom:16px', onclick: () => go('decisions') }, '🧭 决策台'),
     chartPanel(),
     el('h4', {}, '历史对话'),
     ...(state.conversations.length ? state.conversations.map((cv) =>
@@ -443,6 +445,535 @@ async function sendMessage(content) {
     }
   } finally { state.sending = false; }
 }
+
+// ============================================================
+//  DECISION-OS  — the P1 decision closed-loop frontend
+//  create → goals/constraints → options → evidence/risk matrix
+//  → AI structured analysis → action plan → review
+//  Backend contract: /api/decisions* (see src/index.js)
+// ============================================================
+
+const decState = { list: [], current: null, options: [], evidence: [], actions: [], reviews: [], analysis: null, busy: false };
+
+function decHash() {
+  // supports #decisions  and  #decisions/<id>
+  const raw = (location.hash || '').slice(1);
+  const parts = raw.split('/');
+  return parts.length > 1 ? decodeURIComponent(parts.slice(1).join('/')) : null;
+}
+
+// ---- LIST + CREATE ----
+route('decisions', async () => {
+  app().append(navBar());
+  const id = decHash();
+  const container = el('div', { class: 'decwrap' });
+  app().append(container);
+  if (id) { await renderDecisionDetail(container, id); return; }
+  await renderDecisionList(container);
+});
+
+async function renderDecisionList(container) {
+  container.innerHTML = '';
+  container.append(el('div', { class: 'typing', style: 'margin:40px auto' }, '载入决策台…'));
+  let decisions = [];
+  try { const r = await API.call('/decisions'); decisions = r.decisions || []; }
+  catch (e) { toast(e.message); }
+  decState.list = decisions;
+  container.innerHTML = '';
+
+  const head = el('div', { class: 'dec-head' },
+    el('div', {},
+      el('div', { class: 'k' }, 'DECISION OS'),
+      el('h2', {}, '你的重大决策工作台'),
+      el('p', { class: 'dec-sub' }, '把一个让你反复纠结的重大选择，拆成事实、假设、选项与风险，想清楚再落地。命理只是可选的文化反思镜头，不替你做决定。')),
+    el('button', { class: 'btn btn-gold', onclick: openNewDecision }, '＋ 新建决策'));
+
+  const grid = el('div', { class: 'dec-grid' });
+  if (!decisions.length) {
+    grid.append(el('div', { class: 'dec-empty' },
+      el('div', { style: 'font-size:40px;margin-bottom:10px' }, '🧭'),
+      el('h3', {}, '还没有决策'),
+      el('p', {}, '例如：「要不要从大厂裸辞去做独立开发？」「offer A 稳定 vs offer B 高成长，怎么选？」「今年要不要从一线城市搬回老家？」'),
+      el('button', { class: 'btn btn-gold', style: 'margin-top:14px', onclick: openNewDecision }, '创建第一个决策 →')));
+  } else {
+    decisions.forEach((d) => grid.append(decisionCard(d)));
+  }
+  container.append(head, grid);
+}
+
+const STATUS_LABEL = { open: '待梳理', analyzing: '分析中', deciding: '待决定', executing: '执行中', reviewing: '复盘中', closed: '已完成' };
+function decisionCard(d) {
+  return el('div', { class: 'dec-card', onclick: () => go('decisions/' + d.id) },
+    el('div', { class: 'dec-card-top' },
+      el('span', { class: 'dec-status s-' + (d.status || 'open') }, STATUS_LABEL[d.status] || d.status),
+      d.deadline_at ? el('span', { class: 'dec-deadline' }, '截止 ' + fmtDate(d.deadline_at)) : null),
+    el('h3', {}, d.title),
+    el('div', { class: 'dec-card-foot' }, '更新于 ' + fmtDate(d.updated_at)));
+}
+
+function fmtDate(v) {
+  if (!v) return '';
+  const n = typeof v === 'number' ? v : Number(v);
+  const d = new Date(isNaN(n) ? v : n);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function openNewDecision() {
+  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const err = el('div', { class: 'err', style: 'display:none' });
+  const titleI = el('input', { type: 'text', placeholder: '例如：要不要接受 B 公司的 offer？' });
+  const stmtI = el('textarea', { rows: '3', placeholder: '用一两句话把你真正纠结的问题说清楚（可留空，之后再补）' });
+  const deadI = el('input', { type: 'date' });
+  const goalsI = el('input', { type: 'text', placeholder: '你想达成的目标，逗号分隔（如：收入增长, 学到东西, 生活平衡）' });
+  const consI = el('input', { type: 'text', placeholder: '硬约束，逗号分隔（如：不能离开现城市, 家庭开支不能断）' });
+  const lossI = el('input', { type: 'text', placeholder: '你能承受的最大损失（如：3 个月生活费 + 一段时间焦虑）' });
+  const revSel = el('select', {},
+    el('option', { value: '' }, '这个决定可逆吗？'),
+    el('option', { value: 'reversible' }, '基本可逆（走错还能回头）'),
+    el('option', { value: 'partially' }, '部分可逆（代价不小）'),
+    el('option', { value: 'irreversible' }, '几乎不可逆（一步定局）'));
+
+  const submit = async () => {
+    err.style.display = 'none';
+    if (!titleI.value.trim()) { err.textContent = '请先写下你要做的决策'; err.style.display = 'block'; return; }
+    const btn = overlay.querySelector('.btn-gold');
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 创建中…';
+    try {
+      const body = {
+        title: titleI.value.trim(),
+        statement: stmtI.value.trim(),
+        deadline_at: deadI.value ? new Date(deadI.value).getTime() : undefined,
+        goals: splitList(goalsI.value),
+        constraints: splitList(consI.value),
+        affordable_loss: lossI.value.trim(),
+        reversibility: revSel.value || undefined,
+        chart_id: state.chartId || undefined,
+      };
+      const { id } = await API.call('/decisions', { method: 'POST', body });
+      overlay.remove();
+      go('decisions/' + id);
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '创建决策 →'; }
+  };
+
+  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:520px' },
+    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
+    el('h3', {}, '新建一个重大决策'),
+    el('div', { class: 'muted' }, '好的决策，从把问题问清楚开始。'),
+    err,
+    el('div', { class: 'field' }, el('label', {}, '决策标题 *'), titleI),
+    el('div', { class: 'field' }, el('label', {}, '问题陈述'), stmtI),
+    el('div', { class: 'row2' },
+      el('div', { class: 'field' }, el('label', {}, '决策截止日'), deadI),
+      el('div', { class: 'field' }, el('label', {}, '可逆性'), revSel)),
+    el('div', { class: 'field' }, el('label', {}, '目标'), goalsI),
+    el('div', { class: 'field' }, el('label', {}, '硬约束'), consI),
+    el('div', { class: 'field' }, el('label', {}, '可承受的最大损失'), lossI),
+    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '创建决策 →'));
+  overlay.append(modal); document.body.append(overlay);
+  setTimeout(() => titleI.focus(), 50);
+}
+
+function splitList(s) { return String(s || '').split(/[,，、;；\n]/).map((x) => x.trim()).filter(Boolean); }
+
+// ---- DETAIL ----
+async function renderDecisionDetail(container, id) {
+  container.innerHTML = '';
+  container.append(el('div', { class: 'typing', style: 'margin:40px auto' }, '载入决策…'));
+  let data;
+  try { data = await API.call('/decisions/' + id); }
+  catch (e) { container.innerHTML = ''; container.append(el('div', { class: 'dec-empty' }, el('h3', {}, '找不到这个决策'), el('button', { class: 'btn btn-ghost', style: 'margin-top:12px', onclick: () => go('decisions') }, '← 返回决策台'))); return; }
+  const d = data.decision;
+  decState.current = d;
+  decState.options = data.options || [];
+  decState.evidence = data.evidence || [];
+  decState.actions = data.actions || [];
+  decState.reviews = data.reviews || [];
+  decState.analysis = null;
+
+  container.innerHTML = '';
+  const back = el('a', { class: 'dec-back', onclick: () => go('decisions') }, '← 决策台');
+
+  const goals = safeArr(d.goals), cons = safeArr(d.constraints), vals = safeArr(d.values_rank);
+  const header = el('div', { class: 'dec-detail-head' },
+    el('span', { class: 'dec-status s-' + (d.status || 'open') }, STATUS_LABEL[d.status] || d.status),
+    el('h1', {}, d.title),
+    d.statement ? el('p', { class: 'dec-stmt' }, d.statement) : null,
+    el('div', { class: 'dec-meta' },
+      d.deadline_at ? el('span', {}, '⏳ 截止 ' + fmtDate(d.deadline_at)) : null,
+      d.reversibility ? el('span', {}, '🔁 ' + revLabel(d.reversibility)) : null,
+      d.affordable_loss ? el('span', {}, '🛡 可承受损失：' + d.affordable_loss) : null),
+    goals.length ? tagRow('目标', goals) : null,
+    cons.length ? tagRow('硬约束', cons) : null,
+    vals.length ? tagRow('价值排序', vals) : null);
+
+  container.append(back, header,
+    optionsSection(id),
+    evidenceSection(id),
+    analyzeSection(id),
+    actionsSection(id),
+    reviewSection(id));
+}
+
+function revLabel(v) { return { reversible: '基本可逆', partially: '部分可逆', irreversible: '几乎不可逆' }[v] || v; }
+function safeArr(s) { try { const v = typeof s === 'string' ? JSON.parse(s) : s; return Array.isArray(v) ? v : []; } catch { return []; } }
+function tagRow(label, items) {
+  return el('div', { class: 'dec-tagrow' }, el('span', { class: 'dec-tag-lab' }, label),
+    ...items.map((t) => el('span', { class: 'dec-tag' }, t)));
+}
+
+function decSection(title, sub, ...body) {
+  return el('section', { class: 'dec-section' },
+    el('div', { class: 'dec-section-head' }, el('h2', {}, title), sub ? el('p', {}, sub) : null),
+    ...body);
+}
+
+// ---- OPTIONS + RISK MATRIX ----
+function optionsSection(decId) {
+  const wrap = el('div', { class: 'opt-list' });
+  const renderOpts = () => {
+    wrap.innerHTML = '';
+    if (!decState.options.length) { wrap.append(el('div', { class: 'dec-hint' }, '还没有备选项。至少加入 2 个选项（含「维持现状」），对比才有意义。')); }
+    decState.options.forEach((o) => wrap.append(optionCard(o)));
+    wrap.append(el('button', { class: 'btn btn-ghost dec-add', onclick: () => openOptionModal(decId, renderOpts) }, '＋ 添加选项'));
+  };
+  renderOpts();
+  return decSection('① 备选项与风险矩阵', '每个选项都写清上行空间、下行风险、你主观估计的成功概率、最坏情况与止损线——这是决策质量的核心。', wrap);
+}
+
+function optionCard(o) {
+  const prob = (o.subjective_prob != null && o.subjective_prob !== '') ? Math.round(Number(o.subjective_prob) * 100) + '%' : '—';
+  return el('div', { class: 'opt-card' },
+    el('div', { class: 'opt-card-h' }, el('h4', {}, o.label), el('span', { class: 'opt-prob', title: '你主观估计的成功概率' }, '成功概率 ' + prob)),
+    el('div', { class: 'opt-matrix' },
+      matrixCell('↗ 上行空间', o.upside, 'up'),
+      matrixCell('↘ 下行风险', o.downside, 'down'),
+      matrixCell('⚠ 最坏情况', o.worst_case, 'worst'),
+      matrixCell('🛑 止损线', o.stop_loss, 'stop')));
+}
+function matrixCell(label, val, kind) {
+  return el('div', { class: 'mx-cell mx-' + kind },
+    el('div', { class: 'mx-lab' }, label),
+    el('div', { class: 'mx-val' }, val && String(val).trim() ? val : el('span', { class: 'mx-empty' }, '未填写')));
+}
+
+function openOptionModal(decId, onDone) {
+  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const err = el('div', { class: 'err', style: 'display:none' });
+  const labelI = el('input', { type: 'text', placeholder: '如：接受 offer / 维持现状 / 再等三个月' });
+  const upI = el('textarea', { rows: '2', placeholder: '如果顺利，最好能得到什么？' });
+  const downI = el('textarea', { rows: '2', placeholder: '如果不顺利，会失去/付出什么？' });
+  const probI = el('input', { type: 'number', min: '0', max: '100', step: '1', placeholder: '你主观估计的成功概率 %（如 60）' });
+  const worstI = el('input', { type: 'text', placeholder: '最坏情况具体是什么？' });
+  const stopI = el('input', { type: 'text', placeholder: '出现什么信号就必须止损/退出？' });
+
+  const submit = async () => {
+    err.style.display = 'none';
+    if (!labelI.value.trim()) { err.textContent = '请填写选项名称'; err.style.display = 'block'; return; }
+    const btn = overlay.querySelector('.btn-gold'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 保存中…';
+    try {
+      let prob = probI.value.trim() === '' ? undefined : Number(probI.value) / 100;
+      if (prob != null && (prob < 0 || prob > 1)) prob = Math.max(0, Math.min(1, prob));
+      const { id } = await API.call(`/decisions/${decId}/options`, { method: 'POST', body: {
+        label: labelI.value.trim(), upside: upI.value.trim(), downside: downI.value.trim(),
+        subjective_prob: prob, worst_case: worstI.value.trim(), stop_loss: stopI.value.trim(),
+        sort_order: decState.options.length,
+      } });
+      decState.options.push({ id, label: labelI.value.trim(), upside: upI.value.trim(), downside: downI.value.trim(), subjective_prob: prob, worst_case: worstI.value.trim(), stop_loss: stopI.value.trim() });
+      overlay.remove(); onDone();
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '保存选项'; }
+  };
+
+  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:520px' },
+    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
+    el('h3', {}, '添加一个选项'),
+    err,
+    el('div', { class: 'field' }, el('label', {}, '选项名称 *'), labelI),
+    el('div', { class: 'row2' },
+      el('div', { class: 'field' }, el('label', {}, '上行空间'), upI),
+      el('div', { class: 'field' }, el('label', {}, '下行风险'), downI)),
+    el('div', { class: 'field' }, el('label', {}, '主观成功概率（%）'), probI),
+    el('div', { class: 'field' }, el('label', {}, '最坏情况'), worstI),
+    el('div', { class: 'field' }, el('label', {}, '止损线'), stopI),
+    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '保存选项'));
+  overlay.append(modal); document.body.append(overlay);
+  setTimeout(() => labelI.focus(), 50);
+}
+
+// ---- EVIDENCE ----
+function evidenceSection(decId) {
+  const wrap = el('div', { class: 'ev-list' });
+  const renderEv = () => {
+    wrap.innerHTML = '';
+    if (!decState.evidence.length) wrap.append(el('div', { class: 'dec-hint' }, '把「支持」与「反对」的证据分开记录，避免只看对自己有利的信息。'));
+    decState.evidence.forEach((e) => wrap.append(
+      el('div', { class: 'ev-item ev-' + (e.stance || 'neutral') },
+        el('span', { class: 'ev-badge' }, e.stance === 'support' ? '支持' : e.stance === 'against' ? '反对' : '中性'),
+        el('span', { class: 'ev-txt' }, e.content))));
+    wrap.append(el('button', { class: 'btn btn-ghost dec-add', onclick: () => openEvidenceModal(decId, renderEv) }, '＋ 添加证据'));
+  };
+  renderEv();
+  return decSection('② 证据（区分支持 / 反对）', '决策质量取决于是否认真找过反面证据。', wrap);
+}
+
+function openEvidenceModal(decId, onDone) {
+  // Evidence uses the /options endpoint? No — evidence is read-only from GET; there is no POST evidence route.
+  // Provide a lightweight local-only note that we persist via a decision "note" — but backend has no evidence POST.
+  // So we keep evidence editing client-side and fold it into analyze input is not possible; inform honestly.
+  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const err = el('div', { class: 'err', style: 'display:none' });
+  const stance = el('select', {}, el('option', { value: 'support' }, '支持'), el('option', { value: 'against' }, '反对'), el('option', { value: 'neutral' }, '中性'));
+  const txt = el('textarea', { rows: '3', placeholder: '一条具体、可验证的证据或事实' });
+  const submit = async () => {
+    err.style.display = 'none';
+    if (!txt.value.trim()) { err.textContent = '请填写证据内容'; err.style.display = 'block'; return; }
+    // Persist locally in decState (no server evidence-write endpoint yet — tracked in PROGRESS.md).
+    decState.evidence.push({ id: 'local-' + Date.now(), stance: stance.value, content: txt.value.trim(), _local: true });
+    overlay.remove(); onDone();
+  };
+  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:480px' },
+    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
+    el('h3', {}, '添加一条证据'),
+    el('div', { class: 'muted' }, '当前证据在本次会话内使用（服务端持久化端点在开发中，见 PROGRESS.md）。'),
+    err,
+    el('div', { class: 'field' }, el('label', {}, '立场'), stance),
+    el('div', { class: 'field' }, el('label', {}, '证据内容'), txt),
+    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '添加'));
+  overlay.append(modal); document.body.append(overlay);
+  setTimeout(() => txt.focus(), 50);
+}
+
+// ---- AI STRUCTURED ANALYSIS ----
+function analyzeSection(decId) {
+  const box = el('div', { class: 'analyze-box' });
+  const runBtn = el('button', { class: 'btn btn-gold', onclick: () => runAnalyze(decId, box, runBtn) }, '🧠 生成结构化分析');
+  const credits = state.user && state.user.plan === 'free' ? el('span', { class: 'analyze-quota' }, `将消耗 1 次分析额度（剩余 ${state.user.credits}）`) : el('span', { class: 'analyze-quota' }, 'Core 会员：每月公平使用额度');
+  box.append(el('div', { class: 'analyze-cta' }, runBtn, credits));
+  return decSection('③ AI 结构化分析', 'AI 帮你把「事实 / 假设 / 文化反思 / 风险」分开，绝不替你拍板，也不会把命理当成现实因果。', box);
+}
+
+async function runAnalyze(decId, box, btn) {
+  if (decState.busy) return; decState.busy = true;
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 分析中…';
+  try {
+    const { analysis } = await API.call(`/decisions/${decId}/analyze`, { method: 'POST', body: { evidence: decState.evidence } });
+    decState.analysis = analysis;
+    if (state.user && state.user.plan === 'free' && typeof state.user.credits === 'number') state.user.credits = Math.max(0, state.user.credits - 1);
+    box.innerHTML = '';
+    box.append(renderAnalysis(analysis, decId, box, btn));
+  } catch (e) {
+    btn.disabled = false; btn.innerHTML = '🧠 生成结构化分析';
+    if (e.status === 402) { toast('本期 AI 额度已用完，升级 Core 获得更多分析'); setTimeout(() => go('pricing'), 500); }
+    else toast(e.message || '分析失败');
+  } finally { decState.busy = false; }
+}
+
+function renderAnalysis(a, decId, box, btn) {
+  const frag = el('div', { class: 'analysis' });
+  // Degraded / mode banner
+  frag.append(el('div', { class: 'analysis-mode' + (a.degraded ? ' degraded' : '') },
+    a.degraded ? '⚙ 本次为本地结构化分析（未配置外部 AI 模型，数据不出站）。' : '✓ 已启用增强分析。'));
+
+  const block = (title, items, cls, note) => {
+    const list = (items || []).filter((x) => x != null && String(x).trim() !== '');
+    if (!list.length && !note) return null;
+    return el('div', { class: 'an-block ' + cls },
+      el('h4', {}, title), note ? el('p', { class: 'an-note' }, note) : null,
+      list.length ? el('ul', {}, ...list.map((x) => el('li', {}, typeof x === 'string' ? x : JSON.stringify(x)))) : el('p', { class: 'an-empty' }, '（无）'));
+  };
+
+  frag.append(
+    block('✅ 你陈述的目标', a.user_stated_goals, 'an-facts'),
+    block('📌 硬约束', a.constraints, 'an-facts'),
+    block('🔎 已知事实', a.facts, 'an-facts', a.facts && a.facts.length ? null : 'AI 未从你提供的信息中提取到确凿事实——补充更多客观信息会让分析更可靠。'),
+    block('❓ 关键假设（需你验证）', a.assumptions, 'an-assume', '以下是推断而非事实，做决定前请尽量核实。'),
+    block('🕳 信息缺口', a.missing_information, 'an-assume'),
+    block('🧭 军师建议（仅供参考）', a.recommendations, 'an-advice', 'AI 推断，非确定性结论。'),
+    block('🀄 文化反思镜头', a.cultural_reflections, 'an-culture', '命理/传统视角仅用于自我反思，不构成现实因果或决策依据。'),
+    block('⚠ 风险', a.risks, 'an-risk'),
+    block('🌫 不确定性', a.uncertainties, 'an-risk'),
+    block('🛑 止损条件', a.stop_loss_conditions, 'an-risk'),
+    block('🚦 安全提示', a.safety_flags, 'an-safety'),
+    block('👉 建议的下一步行动', a.actions, 'an-actions'));
+
+  // disclaimer — always shown
+  frag.append(el('div', { class: 'an-disclaimer' }, '⚖ ' + (a.disclaimer || 'AI 与文化模块的输出用于辅助思考，不构成职业/投资/医疗/法律/婚姻的确定性建议。最终决定与责任在你自己。')));
+  frag.append(el('button', { class: 'btn btn-ghost', style: 'margin-top:8px', onclick: () => { box.innerHTML = ''; box.append(el('div', { class: 'analyze-cta' }, btn)); btn.disabled = false; btn.innerHTML = '🧠 重新生成分析'; } }, '重新分析'));
+  return frag;
+}
+
+// ---- ACTIONS ----
+function actionsSection(decId) {
+  const wrap = el('div', { class: 'act-list' });
+  const renderActs = () => {
+    wrap.innerHTML = '';
+    if (!decState.actions.length) wrap.append(el('div', { class: 'dec-hint' }, '把决定拆成 7 天内可验证的具体动作，才不会停留在想。'));
+    decState.actions.forEach((a) => wrap.append(
+      el('div', { class: 'act-item' },
+        el('span', { class: 'act-check act-' + (a.status || 'todo') }, a.status === 'done' ? '✓' : '○'),
+        el('div', { class: 'act-body' }, el('div', { class: 'act-txt' }, a.content),
+          el('div', { class: 'act-meta' }, [a.owner ? '负责人 ' + a.owner : null, a.due_at ? '截止 ' + fmtDate(a.due_at) : null].filter(Boolean).join(' · '))))));
+    wrap.append(el('button', { class: 'btn btn-ghost dec-add', onclick: () => openActionModal(decId, renderActs) }, '＋ 添加行动'));
+  };
+  renderActs();
+  return decSection('④ 行动计划', '决策的价值在执行。给每个动作一个负责人和截止日。', wrap);
+}
+
+function openActionModal(decId, onDone) {
+  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const err = el('div', { class: 'err', style: 'display:none' });
+  const contentI = el('input', { type: 'text', placeholder: '如：本周约两位业内前辈聊 offer B 的真实情况' });
+  const ownerI = el('input', { type: 'text', placeholder: '负责人（默认自己）' });
+  const dueI = el('input', { type: 'date' });
+  const submit = async () => {
+    err.style.display = 'none';
+    if (!contentI.value.trim()) { err.textContent = '请填写行动内容'; err.style.display = 'block'; return; }
+    const btn = overlay.querySelector('.btn-gold'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 保存中…';
+    try {
+      const { id } = await API.call(`/decisions/${decId}/actions`, { method: 'POST', body: {
+        content: contentI.value.trim(), owner: ownerI.value.trim(), due_at: dueI.value ? new Date(dueI.value).getTime() : undefined } });
+      decState.actions.push({ id, content: contentI.value.trim(), owner: ownerI.value.trim(), due_at: dueI.value ? new Date(dueI.value).getTime() : null, status: 'todo' });
+      overlay.remove(); onDone();
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '保存行动'; }
+  };
+  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:480px' },
+    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
+    el('h3', {}, '添加一个行动'),
+    err,
+    el('div', { class: 'field' }, el('label', {}, '行动 *'), contentI),
+    el('div', { class: 'row2' },
+      el('div', { class: 'field' }, el('label', {}, '负责人'), ownerI),
+      el('div', { class: 'field' }, el('label', {}, '截止日'), dueI)),
+    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '保存行动'));
+  overlay.append(modal); document.body.append(overlay);
+  setTimeout(() => contentI.focus(), 50);
+}
+
+// ---- REVIEW ----
+function reviewSection(decId) {
+  const wrap = el('div', { class: 'rev-list' });
+  const renderRev = () => {
+    wrap.innerHTML = '';
+    if (!decState.reviews.length) wrap.append(el('div', { class: 'dec-hint' }, '决定之后 30/90 天回来复盘：结果如何？当初的建议是否奏效？这样系统才能帮你校准判断。'));
+    decState.reviews.forEach((r) => wrap.append(
+      el('div', { class: 'rev-item' },
+        el('div', { class: 'rev-h' }, el('span', {}, '复盘 · ' + fmtDate(r.review_at || r.created_at)),
+          el('span', { class: 'rev-sat' }, r.satisfaction != null ? '满意度 ' + r.satisfaction + '/5' : ''),
+          el('span', { class: 'rev-worked' }, r.advice_worked ? '建议奏效 ✓' : '建议未奏效')),
+        r.outcome ? el('p', { class: 'rev-outcome' }, r.outcome) : null,
+        r.notes ? el('p', { class: 'rev-notes' }, r.notes) : null)));
+    wrap.append(el('button', { class: 'btn btn-ghost dec-add', onclick: () => openReviewModal(decId, renderRev) }, '＋ 记录一次复盘'));
+  };
+  renderRev();
+  return decSection('⑤ 复盘与校准', '记录真实结果，才知道当初的判断是否可靠。', wrap);
+}
+
+function openReviewModal(decId, onDone) {
+  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const err = el('div', { class: 'err', style: 'display:none' });
+  const outcomeI = el('textarea', { rows: '3', placeholder: '实际发生了什么？结果如何？' });
+  const satSel = el('select', {}, el('option', { value: '' }, '你对结果的满意度'),
+    ...[1, 2, 3, 4, 5].map((n) => el('option', { value: String(n) }, n + ' / 5')));
+  const workedSel = el('select', {}, el('option', { value: '' }, '当初的分析/建议是否奏效？'),
+    el('option', { value: '1' }, '奏效'), el('option', { value: '0' }, '未奏效'));
+  const notesI = el('textarea', { rows: '2', placeholder: '你学到了什么？下次会怎么做？' });
+  const submit = async () => {
+    err.style.display = 'none';
+    if (!outcomeI.value.trim()) { err.textContent = '请填写实际结果'; err.style.display = 'block'; return; }
+    const btn = overlay.querySelector('.btn-gold'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 保存中…';
+    try {
+      const { id } = await API.call(`/decisions/${decId}/reviews`, { method: 'POST', body: {
+        outcome: outcomeI.value.trim(), satisfaction: satSel.value ? Number(satSel.value) : undefined,
+        advice_worked: workedSel.value === '1', notes: notesI.value.trim() } });
+      decState.reviews.push({ id, review_at: Date.now(), outcome: outcomeI.value.trim(), satisfaction: satSel.value ? Number(satSel.value) : null, advice_worked: workedSel.value === '1' ? 1 : 0, notes: notesI.value.trim() });
+      overlay.remove(); onDone();
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '保存复盘'; }
+  };
+  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:480px' },
+    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
+    el('h3', {}, '记录一次复盘'),
+    err,
+    el('div', { class: 'field' }, el('label', {}, '实际结果 *'), outcomeI),
+    el('div', { class: 'row2' },
+      el('div', { class: 'field' }, el('label', {}, '满意度'), satSel),
+      el('div', { class: 'field' }, el('label', {}, '建议是否奏效'), workedSel)),
+    el('div', { class: 'field' }, el('label', {}, '经验记录'), notesI),
+    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '保存复盘'));
+  overlay.append(modal); document.body.append(overlay);
+  setTimeout(() => outcomeI.focus(), 50);
+}
+
+// ============================================================
+//  ACCOUNT — privacy & data control (MED-9): opt-in memory,
+//  view/delete memories, export, account deletion
+// ============================================================
+route('account', async () => {
+  app().append(navBar());
+  const container = el('div', { class: 'decwrap' });
+  app().append(container);
+  container.append(el('div', { class: 'typing', style: 'margin:40px auto' }, '载入账户…'));
+  let me, mems = [];
+  try {
+    me = (await API.call('/me')).user;
+    mems = (await API.call('/me/memories')).memories || [];
+  } catch (e) { toast(e.message); }
+  state.user = me || state.user;
+  container.innerHTML = '';
+
+  const head = el('div', { class: 'dec-head' },
+    el('div', {}, el('div', { class: 'k' }, 'PRIVACY & DATA'), el('h2', {}, '隐私与数据控制'),
+      el('p', { class: 'dec-sub' }, '你的数据由你掌控。长期记忆默认关闭，只有你主动开启后，系统才会记住你的偏好；你随时可以查看、删除、导出或彻底注销。')));
+
+  // memory opt-in toggle
+  const optState = { on: !!(state.user && state.user.memory_opt_in) };
+  const toggle = el('button', { class: 'dec-toggle' + (optState.on ? ' on' : '') });
+  const setToggle = () => { toggle.className = 'dec-toggle' + (optState.on ? ' on' : ''); toggle.textContent = optState.on ? '已开启' : '已关闭'; };
+  setToggle();
+  toggle.addEventListener('click', async () => {
+    try {
+      const r = await API.call('/me/memory-optin', { method: 'POST', body: { enabled: !optState.on } });
+      optState.on = !!r.memory_opt_in; if (state.user) state.user.memory_opt_in = optState.on; setToggle();
+      toast(optState.on ? '已开启长期记忆' : '已关闭长期记忆');
+    } catch (e) { toast(e.message); }
+  });
+
+  const memWrap = el('div', { class: 'mem-list' });
+  const renderMems = () => {
+    memWrap.innerHTML = '';
+    if (!mems.length) { memWrap.append(el('div', { class: 'dec-hint' }, '暂无长期记忆记录。')); return; }
+    mems.forEach((m) => memWrap.append(
+      el('div', { class: 'mem-item' },
+        el('div', { class: 'mem-txt' }, el('span', { class: 'mem-kind' }, m.kind || 'note'), m.content),
+        el('button', { class: 'mem-del', onclick: async () => {
+          try { await API.call('/me/memories/' + m.id, { method: 'DELETE' }); mems = mems.filter((x) => x.id !== m.id); renderMems(); toast('已删除'); }
+          catch (e) { toast(e.message); } } }, '删除'))));
+  };
+  renderMems();
+
+  const exportBtn = el('button', { class: 'btn btn-ghost', onclick: async () => {
+    try {
+      const data = await API.call('/me/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = el('a', { href: url, download: 'meridian-export.json' }); document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      toast('数据已导出');
+    } catch (e) { toast(e.message); }
+  } }, '导出我的全部数据 (JSON)');
+
+  const delBtn = el('button', { class: 'btn btn-danger', onclick: async () => {
+    if (!confirm('确定要永久注销账户吗？你的命盘、对话、决策、记忆将被彻底删除，且不可恢复。')) return;
+    if (!confirm('再次确认：此操作不可撤销。')) return;
+    try { await API.call('/me', { method: 'DELETE' }); API.setToken(null); state.user = null; toast('账户已注销'); go('home'); }
+    catch (e) { toast(e.message); }
+  } }, '永久注销账户');
+
+  container.append(head,
+    decSection('长期记忆', '默认关闭。开启后，系统会在对话中记住你的目标与偏好，让建议更贴合你。',
+      el('div', { class: 'opt-toggle-row' }, el('span', {}, '允许记住我的长期偏好'), toggle)),
+    decSection('记忆内容', '你可以随时删除任意一条。', memWrap),
+    decSection('数据可携与注销', '你拥有完整的数据主权。',
+      el('div', { class: 'acct-actions' }, exportBtn, delBtn)));
+});
 
 // ---- launch ----
 boot();
