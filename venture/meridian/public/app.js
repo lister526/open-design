@@ -42,8 +42,8 @@ function route(name, fn) { routes[name] = fn; }
 function go(name) { location.hash = name; }
 window.addEventListener('hashchange', render);
 
-// ---- backdrop ----
-function ensureBackdrop() { if (!$('.stars')) document.body.prepend(el('div', { class: 'stars' })); }
+// ---- backdrop (no-op in refined light theme) ----
+function ensureBackdrop() {}
 
 // ---- nav ----
 function navBar() {
@@ -51,14 +51,36 @@ function navBar() {
     ? [el('a', { href: '#decisions' }, '决策台'), el('a', { href: '#app' }, '对话'),
        el('a', { href: '#account' }, '隐私与数据'), el('a', { href: '#pricing' }, '会员'),
        el('a', { class: 'btn btn-ghost', onclick: logout }, '退出')]
-    : [el('a', { href: '#features' }, '能力'), el('a', { href: '#how' }, '原理'), el('a', { href: '#pricing' }, '会员'),
+    : [el('a', { href: '#product' }, '产品'), el('a', { href: '#how' }, '如何运作'),
+       el('a', { href: '#pricing' }, '定价'), el('a', { href: '#faq' }, '常见问题'),
        el('a', { class: 'btn btn-ghost', onclick: () => openAuth('login') }, '登录'),
-       el('a', { class: 'btn btn-gold', onclick: () => openAuth('register') }, '免费开始')];
-  return el('nav', {}, el('div', { class: 'wrap' },
+       el('a', { class: 'btn btn-gold', onclick: () => openAuth('register') }, '免费开始 →')];
+  const menu = el('div', { class: 'nav-links' }, ...links);
+  const toggle = el('button', { class: 'nav-toggle', 'aria-label': '菜单', onclick: () => menu.classList.toggle('open') },
+    el('span', { html: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>' }));
+  menu.addEventListener('click', (e) => { if (e.target.tagName === 'A') menu.classList.remove('open'); });
+  const nav = el('nav', {}, el('div', { class: 'wrap' },
     el('a', { class: 'brand', href: state.user ? '#app' : '#home' },
       el('span', { class: 'mark' }, '子'),
-      el('span', {}, '子午', el('br'), el('small', {}, 'MERIDIAN'))),
-    el('div', { class: 'nav-links' }, ...links)));
+      el('span', {}, '子午', el('small', {}, 'MERIDIAN'))),
+    el('div', { style: 'display:flex;align-items:center;gap:10px' }, menu, toggle)));
+  // scrolled state
+  setTimeout(() => {
+    const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+    onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
+  }, 0);
+  return nav;
+}
+
+// reveal-on-scroll observer
+let _io;
+function observeReveals() {
+  if (!('IntersectionObserver' in window)) { document.querySelectorAll('.reveal').forEach((n) => n.classList.add('in')); return; }
+  _io && _io.disconnect();
+  _io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); _io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach((n) => _io.observe(n));
 }
 
 async function logout() { API.setToken(null); state.user = null; state.chart = null; state.convId = null; go('home'); }
@@ -73,10 +95,10 @@ async function boot() {
   render();
 }
 
-// ---- natal wheel SVG (decorative 12-palace ring) ----
+// ---- compact refined natal wheel (secondary decoration only) ----
 function natalWheel() {
   const branches = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
-  const R = 190, r = 120, cx = 200, cy = 200;
+  const R = 96, r = 62, cx = 100, cy = 100;
   let paths = '', labels = '';
   for (let i = 0; i < 12; i++) {
     const a0 = (i * 30 - 90) * Math.PI / 180, a1 = ((i + 1) * 30 - 90) * Math.PI / 180;
@@ -84,93 +106,205 @@ function natalWheel() {
     const x1o = cx + R * Math.cos(a1), y1o = cy + R * Math.sin(a1);
     const x0i = cx + r * Math.cos(a0), y0i = cy + r * Math.sin(a0);
     const x1i = cx + r * Math.cos(a1), y1i = cy + r * Math.sin(a1);
-    paths += `<path d="M${x0o},${y0o} A${R},${R} 0 0 1 ${x1o},${y1o} L${x1i},${y1i} A${r},${r} 0 0 0 ${x0i},${y0i} Z" fill="${i%2?'rgba(200,161,90,.06)':'rgba(200,161,90,.11)'}" stroke="rgba(200,161,90,.28)" stroke-width="1"/>`;
+    paths += `<path d="M${x0o},${y0o} A${R},${R} 0 0 1 ${x1o},${y1o} L${x1i},${y1i} A${r},${r} 0 0 0 ${x0i},${y0i} Z" fill="${i%2?'rgba(169,128,58,.05)':'rgba(169,128,58,.09)'}" stroke="rgba(169,128,58,.25)" stroke-width=".8"/>`;
     const am = (i * 30 + 15 - 90) * Math.PI / 180, rm = (R + r) / 2;
-    labels += `<text x="${cx + rm*Math.cos(am)}" y="${cy + rm*Math.sin(am)+6}" text-anchor="middle" fill="#e6c98a" font-size="17" font-family="Songti SC,serif">${branches[i]}</text>`;
+    labels += `<text x="${cx + rm*Math.cos(am)}" y="${cy + rm*Math.sin(am)+4}" text-anchor="middle" fill="#a9803a" font-size="10" font-family="Noto Serif SC,serif">${branches[i]}</text>`;
   }
-  return `<svg viewBox="0 0 400 400">
-    <circle cx="200" cy="200" r="190" fill="none" stroke="rgba(200,161,90,.35)" stroke-width="1.5"/>
-    <circle cx="200" cy="200" r="120" fill="none" stroke="rgba(200,161,90,.25)" stroke-width="1"/>
-    <circle cx="200" cy="200" r="70" fill="none" stroke="rgba(200,161,90,.18)" stroke-width="1"/>
-    ${paths}${labels}
-  </svg>`;
+  return `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="96" fill="none" stroke="rgba(169,128,58,.3)" stroke-width="1"/><circle cx="100" cy="100" r="62" fill="none" stroke="rgba(169,128,58,.2)" stroke-width=".8"/><circle cx="100" cy="100" r="34" fill="none" stroke="rgba(169,128,58,.15)" stroke-width=".8"/>${paths}${labels}<text x="100" y="104" text-anchor="middle" fill="#a9803a" font-size="13" font-family="Noto Serif SC,serif">命盘</text></svg>`;
+}
+
+// ---- hero product preview (a real Decision-OS mock, not a gaudy wheel) ----
+function heroPreview() {
+  return el('div', { class: 'preview' },
+    el('div', { class: 'preview-card' },
+      el('div', { class: 'preview-bar' },
+        el('i', {}), el('i', {}), el('i', {}),
+        el('span', { class: 'u' }, 'meridian.app/decisions')),
+      el('div', { class: 'preview-body' },
+        el('div', { class: 'pv-title' }, '要不要接受 B 公司的 offer？'),
+        el('div', { class: 'pv-q' }, '决策工作区 · 2 个选项 · AI 结构化分析'),
+        el('div', { class: 'pv-cols' },
+          el('div', { class: 'pv-opt rec' },
+            el('h5', {}, '接受 offer', el('span', { class: 'tag' }, '推荐参考')),
+            el('div', { class: 'pv-bar' }, el('i', { style: 'width:64%' })),
+            el('div', { class: 'pv-meta' }, '成功概率 64% · 上行：成长快\n止损：3 个月无绩效即复盘')),
+          el('div', { class: 'pv-opt' },
+            el('h5', {}, '维持现状'),
+            el('div', { class: 'pv-bar' }, el('i', { style: 'width:41%' })),
+            el('div', { class: 'pv-meta' }, '成功概率 41% · 稳定但停滞\n下行：错过窗口期'))),
+        el('div', { class: 'pv-flags' },
+          el('span', { class: 'pv-flag fact' }, '事实 3'),
+          el('span', { class: 'pv-flag' }, '需验证的假设 2'),
+          el('span', { class: 'pv-flag risk' }, '风险 2'),
+          el('span', { class: 'pv-flag' }, '文化反思镜头 · 可选')))),
+    el('div', { class: 'preview-float a' }, el('span', { class: 'ic' }, '✓'), el('div', {}, el('b', {}, '事实与假设已分离'), el('br'), el('small', { style: 'color:var(--text-3)' }, 'AI 不替你拍板'))),
+    el('div', { class: 'preview-float b' }, el('span', { class: 'ic' }, '🛡'), el('div', {}, el('b', {}, '止损线已设定'), el('br'), el('small', { style: 'color:var(--text-3)' }, '30/90 天自动复盘'))));
 }
 
 route('home', () => {
-  const hero = el('section', { class: 'hero' }, el('div', { class: 'wrap' },
-    el('div', { class: 'hero-grid' },
-      el('div', {},
-        el('span', { class: 'eyebrow' }, '东方命理 × AI 决策科学'),
-        el('h1', { html: '看清你的<span class="hl">天赋结构</span>与<span class="hl">时机节奏</span>，<br>把每一步走在运势的顺风口' }),
-        el('p', { class: 'lead' }, '子午不是算命。它以你的八字、紫微斗数、大运流年为底层，像一位既懂命理、又懂商业与心理的私人军师，陪你做人生每一个重要决定。'),
-        el('p', { class: 'sub' }, '真太阳时精确排盘 · 记得你的目标与烦恼 · 越聊越懂你'),
-        el('div', { class: 'hero-cta' },
-          el('a', { class: 'btn btn-gold', onclick: () => openAuth('register') }, '免费排盘，开始对话 →'),
-          el('a', { class: 'btn btn-ghost', href: '#how' }, '看它如何运作')),
-        el('div', { class: 'trust' },
-          el('div', {}, el('b', {}, '真太阳时'), '经度+均时差校正'),
-          el('div', {}, el('b', {}, '14 主星'), '紫微十二宫全排'),
-          el('div', {}, el('b', {}, '60 年'), '大运流年推演'))),
-      el('div', {}, el('div', { class: 'wheel' },
-        el('div', { html: natalWheel() }),
-        el('div', { class: 'center' },
-          el('div', { class: 'zh' }, '命 盘'),
-          el('div', { class: 'small' }, '你的专属星图')))))));
+  const hero = el('section', { class: 'hero' },
+    el('div', { class: 'hero-mesh' }),
+    el('div', { class: 'wrap' },
+      el('div', { class: 'hero-grid' },
+        el('div', {},
+          el('span', { class: 'eyebrow' }, '个人决策操作系统'),
+          el('h1', { html: '把重大选择，<em>想清楚</em><br>再落地。' }),
+          el('p', { class: 'lead' }, '子午 Meridian 帮你把人生的关键决策——换工作、创业、搬迁、重大投入——拆成事实、假设、选项与风险，结构化地想明白，而不是凭一时冲动或一句「大师说」。'),
+          el('p', { class: 'sub' }, '东方命理（八字 / 紫微）仅作为可选的文化反思镜头，帮助自我觉察，绝不替你做决定，也不作现实因果保证。'),
+          el('div', { class: 'hero-cta' },
+            el('a', { class: 'btn btn-gold btn-lg', onclick: () => openAuth('register') }, '免费开始', el('span', { class: 'arw' }, '→')),
+            el('a', { class: 'btn btn-ghost btn-lg', href: '#how' }, '看它如何运作')),
+          el('div', { class: 'hero-note' }, el('span', { class: 'dot' }), '无需信用卡 · 数据由你掌控 · 随时导出或删除')),
+        el('div', {}, heroPreview()))),
+    el('div', { class: 'wrap' },
+      el('div', { class: 'metrics reveal' },
+        el('div', { class: 'm' }, el('b', {}, '4 类'), el('span', {}, '事实 / 假设 / 文化 / 风险，清晰分层')),
+        el('div', { class: 'm' }, el('b', {}, '16 字段'), el('span', {}, '结构化决策分析，不是一句模糊建议')),
+        el('div', { class: 'm' }, el('b', {}, '30/90 天'), el('span', {}, '决策后复盘，帮你校准判断力')))));
 
-  const features = el('section', { class: 'blk', id: 'features' }, el('div', { class: 'wrap' },
+  // problem framing — dark editorial band
+  const problem = el('section', { class: 'blk', style: 'background:var(--bg-ink);color:var(--text-inv)' },
+    el('div', { class: 'wrap on-dark', style: 'text-align:center;max-width:760px' },
+      el('span', { class: 'eyebrow' }, '为什么需要它'),
+      el('h2', { style: 'font-family:var(--serif);font-size:clamp(26px,3.6vw,40px);font-weight:600;color:#fff;margin:16px 0 18px;letter-spacing:-.02em', html: '真正改变命运的，是<em style="color:var(--gold-2);font-style:italic">那几个重大决策</em>' }),
+      el('p', { style: 'color:var(--text-inv-2);font-size:18px;line-height:1.6' }, '大多数人不是败在努力，而是败在关键路口拍脑袋、只看利好、没设止损、事后从不复盘。子午把「想清楚」变成一套可重复、可验证的流程——这正是拉开长期差距的地方。')));
+
+  // product — alternating editorial feature rows (NOT card soup)
+  const product = el('section', { class: 'blk', id: 'product' }, el('div', { class: 'wrap' },
     el('div', { class: 'sec-head' },
-      el('div', { class: 'k' }, 'CAPABILITIES'),
-      el('h2', {}, '不止一份报告，而是一位长期陪伴的军师'),
-      el('p', {}, '市面上的星座 App 给你一次性、放之四海皆准的报告。子午记得你是谁、你要什么，然后针对你的盘给出可执行的建议。')),
-    el('div', { class: 'cards' },
-      ...[['🧭','天赋定位','从日主旺衰、十神结构、命身主星，看清你真正擅长与该扬弃的方向——不是标签，是结构。'],
-          ['⏳','时机窗口','大运十年、流年当值：哪一年宜进取、哪一年宜蛰伏、哪个窗口适合创业/换赛道/重大投入。'],
-          ['💬','越聊越懂你','它会记住你的目标、职业、关系与烦恼，下一次对话直接接上，像认识多年的顾问。'],
-          ['🎯','落地建议','拒绝正确的废话。给具体动作、时间点、风险提示，帮你把命理转成可执行的决策。'],
-          ['🔒','严谨排盘','真太阳时（经度+均时差）、立春分年、五虎遁月、五鼠遁时，与专业排盘软件一致。'],
-          ['🌏','中西皆可','中文母语对话，未来支持出海多语言；东方命理是别人抄不走的护城河。']]
-        .map(([i,t,d]) => el('div', { class: 'card' }, el('div', { class: 'ic' }, i), el('h3', {}, t), el('p', {}, d))))));
+      el('span', { class: 'eyebrow', style: 'margin-bottom:14px' }, '产品'),
+      el('h2', {}, '一套完整的决策闭环'),
+      el('p', {}, '从把问题问清楚，到落地执行与复盘校准——每一步都有结构，而不是聊两句就结束。')),
 
-  const how = el('section', { class: 'blk', id: 'how' }, el('div', { class: 'wrap' },
+    el('div', { class: 'feature-row reveal' },
+      el('div', { class: 'fr-text' },
+        el('div', { class: 'num' }, '01 / 结构化'),
+        el('h3', {}, '把纠结，拆成可分析的结构'),
+        el('p', {}, '写下你真正在纠结什么，系统引导你补齐目标、硬约束、可承受的最大损失与可逆性——决策质量，从把问题问对开始。'),
+        el('ul', { class: 'fr-list' },
+          el('li', {}, '目标与价值排序，避免被单一诱因带偏'),
+          el('li', {}, '「可承受损失」优先，而非只盯着最好情况'),
+          el('li', {}, '可逆 / 不可逆判断，决定该多谨慎'))),
+      el('div', { class: 'fr-media' },
+        el('div', { class: 'panel' },
+          el('div', { class: 'panel-h' }, '决策概要', el('span', { class: 'pill' }, '待梳理')),
+          el('div', { class: 'panel-b' },
+            el('div', { class: 'dec-tagrow', style: 'margin:0 0 12px' }, el('span', { class: 'dec-tag-lab' }, '目标'), el('span', { class: 'dec-tag' }, '收入增长'), el('span', { class: 'dec-tag' }, '自主性')),
+            el('div', { class: 'dec-tagrow', style: 'margin:0 0 12px' }, el('span', { class: 'dec-tag-lab' }, '硬约束'), el('span', { class: 'dec-tag' }, '6 个月内不断供房贷')),
+            el('div', { class: 'dec-meta', style: 'margin:0' }, el('span', {}, '🛡 可承受损失：6 个月生活费'), el('span', {}, '🔁 部分可逆')))))),
+
+    el('div', { class: 'feature-row rev reveal' },
+      el('div', { class: 'fr-text' },
+        el('div', { class: 'num' }, '02 / 分层'),
+        el('h3', {}, '事实、假设、文化、风险——泾渭分明'),
+        el('p', {}, 'AI 给出的每条信息都被标注来源：哪些是确凿事实，哪些是需要你验证的假设，哪些只是文化反思镜头，哪些是风险。它绝不把命理当成现实因果，也绝不替你拍板。'),
+        el('ul', { class: 'fr-list' },
+          el('li', {}, '已知事实与需验证的假设分开呈现'),
+          el('li', {}, '东方命理仅作可选的自我反思视角'),
+          el('li', {}, '每次输出都带明确免责，最终决定权在你'))),
+      el('div', { class: 'fr-media' },
+        el('div', { class: 'panel' },
+          el('div', { class: 'panel-h' }, 'AI 结构化分析', el('span', { class: 'pill' }, '16 字段')),
+          el('div', { class: 'panel-b' },
+            el('div', { class: 'epi' },
+              el('div', { class: 'epi-row epi-fact' }, el('h6', {}, '✅ 已知事实'), el('p', {}, 'B 公司薪资高出 28%，通勤时间 +40 分钟')),
+              el('div', { class: 'epi-row epi-assume' }, el('h6', {}, '❓ 需验证的假设'), el('p', {}, '「团队成长空间更大」——尚无客观证据，建议核实')),
+              el('div', { class: 'epi-row epi-culture' }, el('h6', {}, '🀄 文化反思镜头'), el('p', {}, '仅供自我觉察，非决策依据')),
+              el('div', { class: 'epi-row epi-risk' }, el('h6', {}, '⚠ 风险'), el('p', {}, '试用期不通过的收入断档风险'))))))),
+
+    el('div', { class: 'feature-row reveal' },
+      el('div', { class: 'fr-text' },
+        el('div', { class: 'num' }, '03 / 落地'),
+        el('h3', {}, '决定之后，还有执行与复盘'),
+        el('p', {}, '把决策拆成 7 天内可验证的具体行动，设定止损线；30 / 90 天后回来记录真实结果——系统据此帮你校准判断力。决策的价值，在闭环。'),
+        el('ul', { class: 'fr-list' },
+          el('li', {}, '行动计划：负责人 + 截止日'),
+          el('li', {}, '止损条件：出现什么信号就退出'),
+          el('li', {}, '复盘校准：当初的判断到底准不准'))),
+      el('div', { class: 'fr-media' },
+        el('div', { class: 'panel' },
+          el('div', { class: 'panel-h' }, '行动与复盘', el('span', { class: 'pill' }, '执行中')),
+          el('div', { class: 'panel-b' },
+            el('div', { class: 'act-item', style: 'margin-bottom:10px' }, el('span', { class: 'act-check act-done' }, '✓'), el('div', {}, el('div', { class: 'act-txt' }, '约 2 位业内前辈了解 B 公司真实情况'), el('div', { class: 'act-meta' }, '本周 · 已完成'))),
+            el('div', { class: 'act-item' }, el('span', { class: 'act-check' }, '○'), el('div', {}, el('div', { class: 'act-txt' }, '与现主管沟通调岗可能性'), el('div', { class: 'act-meta' }, '截止 3 天后')))))))));
+
+  // how it works — refined steps
+  const how = el('section', { class: 'blk tint', id: 'how' }, el('div', { class: 'wrap' },
     el('div', { class: 'sec-head' },
-      el('div', { class: 'k' }, 'HOW IT WORKS' ),
-      el('h2', {}, '三步，把命盘变成决策力'),
-      el('p', {}, '')),
-    el('div', { class: 'cards' },
-      ...[['① 精确排盘','输入出生时间与地点，系统按真太阳时排出八字与紫微斗数十二宫，误差控制到分钟级。'],
-          ['② 结构解读','引擎计算五行旺衰、喜用神、十神、大运流年，形成你专属的"能量地图"。'],
-          ['③ 对话决策','就当下的具体问题开聊——事业、财富、关系、时机——得到贴合你盘的军师级建议。']]
-        .map(([t,d]) => el('div', { class: 'card' }, el('h3', {}, t), el('p', {}, d))))));
+      el('span', { class: 'eyebrow', style: 'margin-bottom:14px' }, '如何运作'),
+      el('h2', {}, '三步，从纠结到清晰')),
+    el('div', { class: 'steps' },
+      ...[['1', '写下决策', '用一句话说清你在纠结什么，补上目标、约束与可承受的损失。可选绑定命盘作为文化反思。'],
+          ['2', '结构化分析', '系统把事实、假设、文化视角、风险、选项概率分层呈现，给出仅供参考的建议，绝不替你决定。'],
+          ['3', '执行与复盘', '拆出可验证的行动、设定止损线，30/90 天后复盘真实结果，逐步校准你的判断力。']]
+        .map(([n, t, d]) => el('div', { class: 'step reveal' }, el('div', { class: 'n' }, n), el('h4', {}, t), el('p', {}, d))))));
 
-  app().append(navBar(), hero, features, how, pricingSection(), footer());
+  app().append(navBar(), hero, problem, product, how, pricingSection(), faqSection(), ctaSection(), footer());
+  observeReveals();
 });
 
 // ---- pricing ----
 function pricingSection() {
   const plans = [
-    { k: 'free', name: '体验', price: '¥0', per: '', feats: ['排盘（八字+紫微，附置信度与免责）', '1 个决策工作区', '3 次 AI 决策分析', '文化反思镜头（可选开关）'], cta: '免费开始', act: () => state.user ? go('app') : openAuth('register'), feat: false },
-    { k: 'core_monthly', name: 'Core 月度', price: '¥59', per: '/月', feats: ['每月 300 次 AI 分析（公平使用）', '最多 20 个活跃决策', '选项对比 / 证据矩阵 / 风险矩阵', '行动计划 + 复盘提醒', '用户可控的长期记忆', '报告导出'], cta: '订阅 Core', act: () => upgrade('core_monthly'), feat: true },
-    { k: 'pack_single', name: 'Decision Pack', price: '¥199', per: '/次', feats: ['针对单个重大决策', '结构化深度报告', '完整行动方案', '30/90 天复盘机制'], cta: '购买单次', act: () => upgrade('pack_single'), feat: false },
+    { name: '体验', price: '¥0', per: '', desc: '先免费用起来，认可价值再升级', feats: ['排盘（八字 + 紫微，附置信度与免责）', '1 个决策工作区', '3 次 AI 结构化分析', '文化反思镜头（可选开关）'], cta: '免费开始', act: () => state.user ? go('app') : openAuth('register'), feat: false },
+    { name: 'Core 月度', price: '¥59', per: '/月', desc: '为持续做重大决策的你', feats: ['每月 300 次 AI 分析（公平使用）', '最多 20 个活跃决策', '选项对比 / 证据 / 风险矩阵', '行动计划 + 复盘提醒', '用户可控的长期记忆', '报告导出'], cta: '订阅 Core', act: () => upgrade('core_monthly'), feat: true },
+    { name: 'Decision Pack', price: '¥199', per: '/次', desc: '针对单个高风险重大决策', feats: ['针对单个重大决策的深度分析', '结构化深度报告', '完整行动方案 + 止损设计', '30 / 90 天复盘机制'], cta: '购买单次', act: () => upgrade('pack_single'), feat: false },
   ];
   return el('section', { class: 'blk', id: 'pricing' }, el('div', { class: 'wrap' },
     el('div', { class: 'sec-head' },
-      el('div', { class: 'k' }, 'MEMBERSHIP'),
-      el('h2', {}, '先免费体验，认可价值再升级'),
-      el('p', {}, '定价透明，随时取消，绝无诱导续费的暗坑。')),
+      el('span', { class: 'eyebrow', style: 'margin-bottom:14px' }, '定价'),
+      el('h2', {}, '透明定价，随时取消'),
+      el('p', {}, '没有诱导续费的暗坑，没有默认勾选的增值项。权益只在支付经服务端验证后开通。')),
     el('div', { class: 'plans' },
-      ...plans.map((p) => el('div', { class: 'plan' + (p.feat ? ' featured' : '') },
+      ...plans.map((p) => el('div', { class: 'plan reveal' + (p.feat ? ' featured' : '') },
         p.feat ? el('div', { class: 'tag' }, '最受欢迎') : null,
         el('h3', {}, p.name),
-        el('div', { class: 'price' }, p.price, el('small', {}, p.per)),
+        el('div', { class: 'desc' }, p.desc),
+        el('div', { class: 'price' }, p.price, p.per ? el('small', {}, p.per) : null),
         el('ul', {}, ...p.feats.map((f) => el('li', {}, f))),
         el('button', { class: 'btn ' + (p.feat ? 'btn-gold' : 'btn-ghost'), onclick: p.act }, p.cta))))));
 }
 
+// ---- FAQ ----
+function faqSection() {
+  const qs = [
+    ['子午是算命 App 吗？', '不是。子午是一套「个人决策操作系统」，核心是帮你把重大决策结构化地想清楚。东方命理（八字 / 紫微）只作为可选的文化反思镜头，用于自我觉察，绝不作为现实因果的保证，也不会替你做职业、投资、医疗、法律或婚姻决定。'],
+    ['AI 会替我做决定吗？', '不会。AI 会把事实、需验证的假设、文化视角、风险与选项概率分层呈现，并给出仅供参考的建议，但最终决定权和责任始终在你自己手里。每次输出都会附带明确免责说明。'],
+    ['我的数据安全吗？', '你完全掌控自己的数据。长期记忆默认关闭，只有你主动开启后系统才会记住你的偏好；你随时可以查看、删除、一键导出全部数据，或彻底注销账户。'],
+    ['为什么定价这么克制？', '我们相信价值应由真实的决策帮助兑现，而不是靠诱导续费。免费额度足够你体验完整闭环，认可之后再升级；随时可取消，绝无暗坑。'],
+    ['命理引擎准确吗？', '排盘部分（八字、大运流年）按真太阳时精确计算，与专业排盘软件一致，并对每个模块标注置信度。紫微与喜用神等推断部分明确标注为「实验性 / 启发式」，我们不夸大、不承诺「100% 命中」。'],
+  ];
+  return el('section', { class: 'blk tint', id: 'faq' }, el('div', { class: 'wrap' },
+    el('div', { class: 'sec-head' },
+      el('span', { class: 'eyebrow', style: 'margin-bottom:14px' }, '常见问题'),
+      el('h2', {}, '你可能想问的')),
+    el('div', { class: 'faq' },
+      ...qs.map(([q, a]) => el('details', {}, el('summary', {}, q), el('p', {}, a))))));
+}
+
+// ---- CTA band ----
+function ctaSection() {
+  return el('section', { style: 'padding:20px 0 92px' }, el('div', { class: 'wrap' },
+    el('div', { class: 'ctaband on-dark reveal' },
+      el('h2', { html: '下一个重大决定，别再<em style="color:var(--gold-2);font-style:italic"> 拍脑袋</em>' }),
+      el('p', {}, '免费开始，用一个真实决策走完完整闭环——你会发现「想清楚」本身，就是最大的杠杆。'),
+      el('a', { class: 'btn btn-gold btn-lg', onclick: () => state.user ? go('decisions') : openAuth('register') }, '免费开始', el('span', { class: 'arw' }, '→')))));
+}
+
 function footer() {
+  const col = (title, links) => el('div', {}, el('h5', {}, title),
+    ...links.map(([t, href, fn]) => el('a', fn ? { onclick: fn } : { href }, t)));
   return el('footer', {}, el('div', { class: 'wrap' },
-    el('div', { class: 'brand' }, el('span', { class: 'mark' }, '子'), el('span', {}, '子午 Meridian')),
-    el('div', {}, '东方命理 × AI 决策科学 · 命是底牌，运是打法，选择权在你'),
-    el('div', { style: 'margin-top:10px;opacity:.6' }, '© 2026 Meridian. 本产品提供的内容仅供自我认知与决策参考，不构成医疗、法律或投资建议。')));
+    el('div', { class: 'foot-grid' },
+      el('div', { class: 'foot-about' },
+        el('a', { class: 'brand', href: '#home' }, el('span', { class: 'mark' }, '子'), el('span', {}, '子午', el('small', {}, 'MERIDIAN'))),
+        el('p', {}, '把重大选择想清楚再落地的个人决策操作系统。命是底牌，运是打法，选择权始终在你。')),
+      col('产品', [['产品能力', '#product'], ['如何运作', '#how'], ['定价', '#pricing'], ['常见问题', '#faq']]),
+      col('开始', [['免费注册', null, () => openAuth('register')], ['登录', null, () => openAuth('login')], ['决策台', null, () => state.user ? go('decisions') : openAuth('register')]]),
+      col('信任', [['隐私与数据', null, () => state.user ? go('account') : openAuth('register')], ['AI 透明度', '#faq'], ['决策免责', '#faq']])),
+    el('div', { class: 'foot-bottom' },
+      el('div', { class: 'disc' }, '© 2026 Meridian 子午. 本产品提供的内容仅供自我认知与决策参考，不构成医疗、法律、投资、婚姻或心理诊断建议。东方命理内容仅为文化反思，不作现实因果保证。'),
+      el('div', {}, '真太阳时精确排盘 · 数据主权归你'))));
 }
 
 async function upgrade(plan) {
@@ -230,13 +364,14 @@ function render() {
   const name = (location.hash || '#home').slice(1).split('?')[0].split('/')[0] || 'home';
   if (['app', 'decisions', 'account'].includes(name) && !state.user) { go('home'); return; }
   const fn = routes[name] || routes['home'];
-  // anchor sections live on home; for #features etc. render home then scroll
-  if (['features', 'how', 'pricing'].includes(name)) {
+  // anchor sections live on home; render home then smooth-scroll
+  if (['product', 'how', 'pricing', 'faq'].includes(name)) {
     routes['home']();
     setTimeout(() => document.getElementById(name)?.scrollIntoView({ behavior: 'smooth' }), 60);
     return;
   }
   fn();
+  window.scrollTo(0, 0);
 }
 
 // ---- APP (authenticated) ----

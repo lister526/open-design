@@ -55,4 +55,10 @@
 | 全套合规文档 | 🔧 SCAFFOLDED + REQUIRES_LEGAL_REVIEW |
 
 ## 一句话进度总结
-**P0 100% 完成且通过运行时安全测试;P1 决策闭环已打通(后端 API + 完整可用前端:创建→目标约束→选项/风险矩阵→AI 16 字段结构化分析→行动计划→复盘,外加隐私数据控制台);仅剩 evidence 持久化与行动勾选两个小端点未补(已诚实登记)。P2/P3 明确未做并已登记。** 这是一个诚实、可被接管、用户真的能打开就用、不会在尽调中暴雷的状态,而不是一个假装完成的大项目。
+**P0 100% 完成且通过运行时安全测试;P1 决策闭环已打通(后端 API + 完整可用前端:创建→目标约束→选项/风险矩阵→AI 16 字段结构化分析→行动计划→复盘,外加隐私数据控制台);营销落地页已按 Stripe 级标准整体重做(Refined 浅色设计系统:Playfair Display + Inter + Noto Serif SC、8pt 栅格、克制的青铜金强调色、编辑式交替特性行而非卡片堆、响应式导航 + 滚动揭示 + WCAG-AA 焦点态 + prefers-reduced-motion);仅剩 evidence 持久化与行动勾选两个小端点未补(已诚实登记)。P2/P3 明确未做并已登记。** 这是一个诚实、可被接管、用户真的能打开就用、不会在尽调中暴雷的状态,而不是一个假装完成的大项目。
+
+### 落地页重做验证(2026-08-02)
+- `node --check public/app.js` 通过;`public/styles.css` 34KB 全新 Refined 浅色系统。
+- 浏览器实测 `#home` / `#pricing` / `#faq` 均 **0 console error**,标题、字体、区块正确渲染。
+- P0 冒烟测试 **15/15 通过**。
+- 深度借鉴 nexu-io/open-design(151 套品牌级设计系统,含 stripe)与 bergside/awesome-design-skills(refined/premium/spacious/editorial)。
