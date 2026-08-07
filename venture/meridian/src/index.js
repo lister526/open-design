@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { buildChart } from './engine.js';
+import { synastry } from './synastry.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, uuid, refCode } from './auth.js';
 import { buildSystemPrompt, chat, extractMemories, advisorFallback } from './ai.js';
 import { requireJwtSecret, llmConfig } from './config.js';
@@ -487,11 +488,189 @@ app.post('/api/billing/webhook/:provider', async (c) => {
     await c.env.DB.prepare('UPDATE users SET plan=?, monthly_ai_quota=?, ai_used_this_period=0, period_reset_at=?, updated_at=? WHERE id=?')
       .bind(ent.plan, ent.monthlyAiQuota, periodEnd, now(), order.user_id).run();
   } else {
-    // one-time pack: add credits
-    await c.env.DB.prepare('UPDATE users SET credits=credits+?, updated_at=? WHERE id=?').bind(ent.packCredits || 1, now(), order.user_id).run();
+    // one-time report pack: add report credits (stored in users.credits)
+    await c.env.DB.prepare('UPDATE users SET credits=credits+?, updated_at=? WHERE id=?').bind(ent.reportCredits || ent.packCredits || 1, now(), order.user_id).run();
   }
   await audit(c.env, order.user_id, 'system', 'entitlement_granted', order_id, { plan: order.plan_code });
   return json(c, { ok: true });
+});
+
+// ======================================================================
+// 子午·合盘 (Meridian Sync) — 关系/缘分 API
+// ======================================================================
+const REL_TYPES = ['romance', 'crush', 'reunion', 'marriage', 'friendship'];
+function slug8() { return uuid().replace(/-/g, '').slice(0, 10); }
+
+// 公开预览：两个人的出生信息 → 免费 hook（总分/关键词/命中钩子/维度分），完整内容锁定。
+// 无需登录即可体验「命中感」，这是转化的第一击。
+app.post('/api/sync/preview', async (c) => {
+  const rl = rateLimit(`syncprev:${clientIp(c)}`, { limit: 30, windowMs: 60_000 });
+  if (!rl.ok) return json(c, { error: 'rate_limited', retryAfter: rl.retryAfter }, 429);
+  const b = await c.req.json().catch(() => ({}));
+  const { a, b: bb, rel_type } = b;
+  if (!a?.date || !bb?.date) return json(c, { error: 'missing_params', message: '需要双方的出生日期' }, 400);
+  const relType = REL_TYPES.includes(rel_type) ? rel_type : 'romance';
+  try {
+    const chartA = buildChart({ gender: a.gender || 'female', date: a.date, time: a.time || '12:00', place: clamp(a.place || '', MAX_FIELD_LEN), longitude: a.lon != null ? Number(a.lon) : 120 });
+    const chartB = buildChart({ gender: bb.gender || 'male', date: bb.date, time: bb.time || '12:00', place: clamp(bb.place || '', MAX_FIELD_LEN), longitude: bb.lon != null ? Number(bb.lon) : 120 });
+    const r = synastry(chartA, chartB, { nameA: clamp(a.name || '你', 20), nameB: clamp(bb.name || 'TA', 20), relType });
+    // 免费只给钩子：总分、关键词、headline、维度分、1 条 hook、strengths/frictions 的数量（悬念）
+    return json(c, {
+      preview: {
+        overall: r.overall, keyword: r.keyword, headline: r.headline, dims: r.dims,
+        hook: r.hook,
+        locked_counts: { strengths: r.strengths.length, frictions: r.frictions.length, advice: r.advice.length, timing: r.timing.length },
+        rel_type: relType, name_a: r.meta.nameA, name_b: r.meta.nameB,
+        disclaimer: r.disclaimer,
+      },
+    });
+  } catch (e) {
+    return json(c, { error: 'compute_failed', message: '出生信息有误，请检查日期格式 (YYYY-MM-DD)' }, 400);
+  }
+});
+
+// 创建一段关系并生成报告（需登录，落库）。返回 hook；完整内容 locked=1，需解锁。
+app.post('/api/sync/relationships', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const b = await c.req.json().catch(() => ({}));
+  const { a, b: bb, rel_type } = b;
+  if (!a?.date || !bb?.date) return json(c, { error: 'missing_params' }, 400);
+  const relType = REL_TYPES.includes(rel_type) ? rel_type : 'romance';
+  let chartA, chartB, r;
+  try {
+    chartA = buildChart({ gender: a.gender || 'female', date: a.date, time: a.time || '12:00', place: clamp(a.place || '', MAX_FIELD_LEN), longitude: a.lon != null ? Number(a.lon) : 120 });
+    chartB = buildChart({ gender: bb.gender || 'male', date: bb.date, time: bb.time || '12:00', place: clamp(bb.place || '', MAX_FIELD_LEN), longitude: bb.lon != null ? Number(bb.lon) : 120 });
+    r = synastry(chartA, chartB, { nameA: clamp(a.name || '你', 20), nameB: clamp(bb.name || 'TA', 20), relType });
+  } catch { return json(c, { error: 'compute_failed' }, 400); }
+
+  const relId = uuid();
+  await c.env.DB.prepare(
+    `INSERT INTO relationships (id,user_id,rel_type,name_a,name_b,a_gender,a_date,a_time,a_place,a_lon,b_gender,b_date,b_time,b_place,b_lon,status,paid,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(relId, u.id, relType, clamp(a.name || '你', 20), clamp(bb.name || 'TA', 20),
+    a.gender || 'female', a.date, a.time || '12:00', clamp(a.place || '', MAX_FIELD_LEN), a.lon != null ? Number(a.lon) : 120,
+    bb.gender || 'male', bb.date, bb.time || '12:00', clamp(bb.place || '', MAX_FIELD_LEN), bb.lon != null ? Number(bb.lon) : 120,
+    'active', 0, now(), now()).run();
+
+  const reportId = uuid();
+  await c.env.DB.prepare(
+    'INSERT INTO sync_reports (id,relationship_id,user_id,kind,overall,keyword,payload,locked,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).bind(reportId, relId, u.id, relType === 'marriage' ? 'marriage' : relType === 'reunion' ? 'reunion' : 'compat', r.overall, r.keyword, JSON.stringify(r), 1, now()).run();
+  await logEvent(c.env, u.id, 'relationship_created', { relId, relType, overall: r.overall });
+
+  return json(c, {
+    relationship_id: relId, report_id: reportId,
+    preview: { overall: r.overall, keyword: r.keyword, headline: r.headline, dims: r.dims, hook: r.hook,
+      locked_counts: { strengths: r.strengths.length, frictions: r.frictions.length, advice: r.advice.length, timing: r.timing.length },
+      rel_type: relType, name_a: r.meta.nameA, name_b: r.meta.nameB, disclaimer: r.disclaimer },
+  });
+});
+
+app.get('/api/sync/relationships', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const { results } = await c.env.DB.prepare(
+    `SELECT r.id,r.rel_type,r.name_a,r.name_b,r.paid,r.updated_at,
+            (SELECT overall FROM sync_reports sr WHERE sr.relationship_id=r.id ORDER BY created_at DESC LIMIT 1) as overall,
+            (SELECT keyword FROM sync_reports sr WHERE sr.relationship_id=r.id ORDER BY created_at DESC LIMIT 1) as keyword,
+            (SELECT id FROM sync_reports sr WHERE sr.relationship_id=r.id ORDER BY created_at DESC LIMIT 1) as report_id
+     FROM relationships r WHERE r.user_id=? AND r.deleted_at IS NULL ORDER BY r.updated_at DESC`
+  ).bind(u.id).all();
+  return json(c, { relationships: results || [] });
+});
+
+// 获取报告：locked=1 只返回 hook；locked=0 返回完整内容。
+app.get('/api/sync/reports/:id', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const rep = await c.env.DB.prepare('SELECT * FROM sync_reports WHERE id=? AND user_id=?').bind(c.req.param('id'), u.id).first();
+  if (!rep) return json(c, { error: 'not_found' }, 404);
+  const full = JSON.parse(rep.payload);
+  if (rep.locked) {
+    return json(c, { locked: true, report_id: rep.id, relationship_id: rep.relationship_id,
+      preview: { overall: full.overall, keyword: full.keyword, headline: full.headline, dims: full.dims, hook: full.hook,
+        locked_counts: { strengths: full.strengths.length, frictions: full.frictions.length, advice: full.advice.length, timing: full.timing.length },
+        rel_type: full.meta.relType, name_a: full.meta.nameA, name_b: full.meta.nameB, disclaimer: full.disclaimer } });
+  }
+  return json(c, { locked: false, report_id: rep.id, relationship_id: rep.relationship_id, report: full });
+});
+
+// 解锁完整报告：优先扣 report credit；无 credit 则提示去支付。
+app.post('/api/sync/reports/:id/unlock', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const rep = await c.env.DB.prepare('SELECT * FROM sync_reports WHERE id=? AND user_id=?').bind(c.req.param('id'), u.id).first();
+  if (!rep) return json(c, { error: 'not_found' }, 404);
+  if (!rep.locked) return json(c, { ok: true, already: true });
+  // member 无需扣 credit（会员权益）；否则原子扣一个 report credit
+  if (u.plan === 'member') {
+    await c.env.DB.prepare('UPDATE sync_reports SET locked=0 WHERE id=?').bind(rep.id).run();
+  } else {
+    const r = await c.env.DB.prepare("UPDATE users SET credits=credits-1, updated_at=? WHERE id=? AND credits>0").bind(now(), u.id).run();
+    if ((r.meta?.changes || 0) === 0) return json(c, { error: 'no_credit', message: '需要购买报告或成为会员来解锁', upgrade: true }, 402);
+    await c.env.DB.prepare('UPDATE sync_reports SET locked=0 WHERE id=?').bind(rep.id).run();
+  }
+  await c.env.DB.prepare('UPDATE relationships SET paid=1, updated_at=? WHERE id=?').bind(now(), rep.relationship_id).run();
+  await logEvent(c.env, u.id, 'report_unlocked', { reportId: rep.id });
+  const full = JSON.parse(rep.payload);
+  return json(c, { ok: true, locked: false, report: full });
+});
+
+// 生成公开分享卡（不含出生隐私）。返回 slug。
+app.post('/api/sync/share', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const b = await c.req.json().catch(() => ({}));
+  const rep = await c.env.DB.prepare('SELECT * FROM sync_reports WHERE id=? AND user_id=?').bind(b.report_id || '', u.id).first();
+  if (!rep) return json(c, { error: 'not_found' }, 404);
+  const full = JSON.parse(rep.payload);
+  const slug = slug8();
+  await c.env.DB.prepare('INSERT INTO share_cards (slug,user_id,relationship_id,title,keyword,overall,dims,rel_type,views,converts,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .bind(slug, u.id, rep.relationship_id, clamp(full.headline || '', 200), full.keyword, full.overall, JSON.stringify(full.dims), full.meta.relType, 0, 0, now()).run();
+  await logEvent(c.env, u.id, 'share_created', { slug });
+  return json(c, { slug, url: `/c/${slug}` });
+});
+
+// 公开读取分享卡（无需登录）。累加浏览量。
+app.get('/api/sync/card/:slug', async (c) => {
+  const card = await c.env.DB.prepare('SELECT slug,title,keyword,overall,dims,rel_type,views FROM share_cards WHERE slug=?').bind(c.req.param('slug')).first();
+  if (!card) return json(c, { error: 'not_found' }, 404);
+  await c.env.DB.prepare('UPDATE share_cards SET views=views+1 WHERE slug=?').bind(card.slug).run().catch(() => {});
+  return json(c, { card: { ...card, dims: JSON.parse(card.dims || '{}') } });
+});
+
+// 真实反馈（校准命中感 + 数据飞轮）。
+app.post('/api/sync/feedback', async (c) => {
+  const u = await auth(c);
+  if (!u) return json(c, { error: 'unauthorized' }, 401);
+  const b = await c.req.json().catch(() => ({}));
+  const acc = ['accurate', 'partly', 'inaccurate'].includes(b.accuracy) ? b.accuracy : 'partly';
+  await c.env.DB.prepare('INSERT INTO sync_feedback (id,user_id,relationship_id,report_id,accuracy,outcome,created_at) VALUES (?,?,?,?,?,?,?)')
+    .bind(uuid(), u.id, b.relationship_id || null, b.report_id || null, acc, clamp(b.outcome || '', MAX_MESSAGE_LEN), now()).run();
+  await logEvent(c.env, u.id, 'feedback_given', { accuracy: acc });
+  return json(c, { ok: true });
+});
+
+// ---- 简易管理后台数据（受 ADMIN_TOKEN 保护；无 token 不可访问）----
+app.get('/api/admin/stats', async (c) => {
+  const token = c.req.header('x-admin-token') || '';
+  if (!c.env.ADMIN_TOKEN || token !== c.env.ADMIN_TOKEN) return json(c, { error: 'forbidden' }, 403);
+  const one = async (q) => (await c.env.DB.prepare(q).first())?.n || 0;
+  const stats = {
+    users: await one('SELECT COUNT(*) n FROM users'),
+    members: await one("SELECT COUNT(*) n FROM users WHERE plan='member'"),
+    relationships: await one('SELECT COUNT(*) n FROM relationships'),
+    reports: await one('SELECT COUNT(*) n FROM sync_reports'),
+    reports_unlocked: await one('SELECT COUNT(*) n FROM sync_reports WHERE locked=0'),
+    paid_orders: await one("SELECT COUNT(*) n FROM orders WHERE status='paid'"),
+    revenue_minor: (await c.env.DB.prepare("SELECT COALESCE(SUM(amount_minor),0) n FROM orders WHERE status='paid'").first())?.n || 0,
+    shares: await one('SELECT COUNT(*) n FROM share_cards'),
+    share_views: (await c.env.DB.prepare('SELECT COALESCE(SUM(views),0) n FROM share_cards').first())?.n || 0,
+    feedback_accurate: await one("SELECT COUNT(*) n FROM sync_feedback WHERE accuracy='accurate'"),
+    feedback_total: await one('SELECT COUNT(*) n FROM sync_feedback'),
+  };
+  return json(c, { stats });
 });
 
 // SPA fallback

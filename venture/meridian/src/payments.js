@@ -8,23 +8,33 @@
 //
 // Money is stored as INTEGER minor units (cents / 分). Never floats.
 
+// 子午·合盘 变现阶梯。金额为整数最小单位（分）。
 export const PLANS = {
-  core_monthly: { code: 'core_monthly', name: 'Core 月度', amount: 5900, currency: 'CNY', period: 'month', kind: 'subscription' },
-  core_yearly:  { code: 'core_yearly',  name: 'Core 年度', amount: 59900, currency: 'CNY', period: 'year',  kind: 'subscription' },
-  pack_single:  { code: 'pack_single',  name: 'Decision Pack 单次', amount: 19900, currency: 'CNY', period: null, kind: 'one_time' },
+  // 微支付：解锁单份完整合盘报告（冲动价）
+  report_lite:   { code: 'report_lite',   name: '缘分完整报告', amount: 1900,  currency: 'CNY', period: null,   kind: 'one_time', reportCredits: 1 },
+  report_deep:   { code: 'report_deep',   name: '深度合盘报告', amount: 3900,  currency: 'CNY', period: null,   kind: 'one_time', reportCredits: 3 },
+  // 深度层：复合择时 / 合婚（高客单一次性）
+  report_marriage:{ code: 'report_marriage', name: '合婚 · 深度定制', amount: 39900, currency: 'CNY', period: null, kind: 'one_time', reportCredits: 5 },
+  // 订阅：关系持续追踪（一键可取消，无暗坑）
+  sync_monthly:  { code: 'sync_monthly',  name: '子午会员 · 月', amount: 3900,  currency: 'CNY', period: 'month', kind: 'subscription' },
+  sync_yearly:   { code: 'sync_yearly',   name: '子午会员 · 年', amount: 29900, currency: 'CNY', period: 'year',  kind: 'subscription' },
 };
 
 // Entitlements per plan (server-authoritative; never trust client).
 export function entitlementFor(planCode) {
   switch (planCode) {
-    case 'core_monthly':
-    case 'core_yearly':
-      // Fair-use monthly AI quota (NOT "unlimited" — CRIT-6 fix).
-      return { plan: 'core', monthlyAiQuota: 300, activeDecisionLimit: 20 };
-    case 'pack_single':
-      return { plan: 'free', packCredits: 1 }; // one deep decision pack
+    case 'sync_monthly':
+    case 'sync_yearly':
+      // 会员：公平使用额度（非"无限"），含每月新报告额度 + AI 追问额度
+      return { plan: 'member', monthlyAiQuota: 300, reportCredits: 6 };
+    case 'report_deep':
+      return { plan: 'free', reportCredits: 3 };
+    case 'report_marriage':
+      return { plan: 'free', reportCredits: 5 };
+    case 'report_lite':
+      return { plan: 'free', reportCredits: 1 };
     default:
-      return { plan: 'free', monthlyAiQuota: 0, activeDecisionLimit: 1 };
+      return { plan: 'free', monthlyAiQuota: 0, reportCredits: 0 };
   }
 }
 

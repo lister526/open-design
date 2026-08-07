@@ -26,23 +26,23 @@ R=$(curl -s -o /dev/null -w "%{http_code}" -X POST $BASE/api/billing/upgrade -H 
 [ "$R" = "404" ] && ok "/api/billing/upgrade returns 404 (backdoor removed)" || no "backdoor still reachable (HTTP $R)"
 
 echo "[4] CRIT-1: checkout creates PENDING order, no entitlement"
-R=$(curl -s -X POST $BASE/api/billing/checkout -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"plan":"core_monthly","provider":"mock"}')
+R=$(curl -s -X POST $BASE/api/billing/checkout -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"plan":"sync_monthly","provider":"mock"}')
 OID=$(echo "$R" | jqget order_id)
 [ -n "$OID" ] && ok "checkout created order $OID" || no "checkout failed: $R"
 ME=$(curl -s $BASE/api/me -H "Authorization: Bearer $TOKEN")
 [ "$(echo "$ME" | jquser plan)" = "free" ] && ok "still free after checkout (no premature entitlement)" || no "plan changed without payment!"
 
 echo "[5] CRIT-1: forged webhook (bad signature) must be REJECTED"
-R=$(curl -s -o /dev/null -w "%{http_code}" -X POST $BASE/api/billing/webhook/mock -H 'x-signature: forged' -H 'Content-Type: application/json' -d "{\"order_id\":\"$OID\",\"amount\":5900,\"currency\":\"CNY\"}")
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST $BASE/api/billing/webhook/mock -H 'x-signature: forged' -H 'Content-Type: application/json' -d "{\"order_id\":\"$OID\",\"amount\":3900,\"currency\":\"CNY\"}")
 [ "$R" = "401" ] && ok "forged webhook rejected (401)" || no "forged webhook accepted (HTTP $R)"
 
 echo "[6] CRIT-1: valid signed webhook grants entitlement"
-PAYLOAD="{\"order_id\":\"$OID\",\"event_id\":\"evt_$OID\",\"amount\":5900,\"currency\":\"CNY\"}"
+PAYLOAD="{\"order_id\":\"$OID\",\"event_id\":\"evt_$OID\",\"amount\":3900,\"currency\":\"CNY\"}"
 SIG=$(python3 -c "import hmac,hashlib;print(hmac.new(b'mock-test-secret-local','''$PAYLOAD'''.encode(),hashlib.sha256).hexdigest())")
 R=$(curl -s -X POST $BASE/api/billing/webhook/mock -H "x-signature: $SIG" -H 'Content-Type: application/json' -d "$PAYLOAD")
 [ "$(echo "$R" | jqget ok)" = "True" ] && ok "signed webhook accepted" || no "signed webhook failed: $R"
 ME=$(curl -s $BASE/api/me -H "Authorization: Bearer $TOKEN")
-[ "$(echo "$ME" | jquser plan)" = "core" ] && ok "entitlement granted (plan=core)" || no "entitlement NOT granted: $ME"
+[ "$(echo "$ME" | jquser plan)" = "member" ] && ok "entitlement granted (plan=member)" || no "entitlement NOT granted: $ME"
 
 echo "[7] CRIT-1: replay same webhook is idempotent"
 R=$(curl -s -X POST $BASE/api/billing/webhook/mock -H "x-signature: $SIG" -H 'Content-Type: application/json' -d "$PAYLOAD")
@@ -73,6 +73,27 @@ R=$(curl -s $BASE/api/me/export -H "Authorization: Bearer $TOKEN")
 echo "$R" | grep -q '"charts"' && ok "data export works" || no "export failed"
 R=$(curl -s -X POST $BASE/api/me/memory-optin -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"enabled":true}')
 [ "$(echo "$R" | jqget memory_opt_in)" = "True" ] && ok "memory opt-in toggle works" || no "opt-in failed: $R"
+
+echo "[12] SYNC: public preview (no auth, no privacy leak)"
+PV=$(curl -s -X POST $BASE/api/sync/preview -H 'Content-Type: application/json' -d '{"rel_type":"romance","a":{"name":"A","gender":"female","date":"1998-06-15","time":"08:30","longitude":121.47},"b":{"name":"B","gender":"male","date":"1996-11-02","time":"14:00","longitude":116.4}}')
+echo "$PV" | grep -q '"overall"' && ok "preview returns score" || no "preview failed: ${PV:0:120}"
+echo "$PV" | grep -q '"date"\|password_hash' && no "preview LEAKS birth data!" || ok "preview hides raw birth data"
+
+echo "[13] SYNC: create relationship + report starts LOCKED"
+CR=$(curl -s -X POST $BASE/api/sync/relationships -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"rel_type":"romance","a":{"name":"A","gender":"female","date":"1998-06-15","time":"08:30","longitude":121.47},"b":{"name":"B","gender":"male","date":"1996-11-02","time":"14:00","longitude":116.4}}')
+REPID=$(echo "$CR" | jqget report_id)
+[ -n "$REPID" ] && ok "relationship+report created ($REPID)" || no "create failed: ${CR:0:120}"
+RG=$(curl -s $BASE/api/sync/reports/$REPID -H "Authorization: Bearer $TOKEN")
+[ "$(echo "$RG" | jqget locked)" = "True" ] && ok "report starts locked" || no "report not locked: ${RG:0:120}"
+
+echo "[14] SYNC: unlock spends a free credit, returns full report"
+UN=$(curl -s -X POST $BASE/api/sync/reports/$REPID/unlock -H "Authorization: Bearer $TOKEN")
+[ "$(echo "$UN" | jqget locked)" = "False" ] && ok "unlocked (full report)" || no "unlock failed: ${UN:0:120}"
+
+echo "[15] SYNC: share card is public + hides birth data"
+SLUG=$(curl -s -X POST $BASE/api/sync/share -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"report_id\":\"$REPID\"}" | jqget slug)
+CARD=$(curl -s $BASE/api/sync/card/$SLUG)
+{ echo "$CARD" | grep -q '"keyword"' && ! echo "$CARD" | grep -q '"date"'; } && ok "public card ok, no birth leak" || no "card failed/leaked: ${CARD:0:120}"
 
 echo ""
 echo "== RESULT: $PASS passed, $FAIL failed =="

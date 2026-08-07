@@ -1,4 +1,6 @@
-// Meridian SPA — vanilla JS, no build step. Talks to the Hono/D1 backend.
+// 子午·合盘 (Meridian Sync) — vanilla JS SPA, no build step. Talks to the Hono/D1 backend.
+// Product: 东方合盘 / 缘分洞察 — 看懂你俩的缘分。
+
 const API = {
   token: localStorage.getItem('mrd_token') || null,
   async call(path, { method = 'GET', body } = {}) {
@@ -12,7 +14,7 @@ const API = {
   setToken(t) { this.token = t; if (t) localStorage.setItem('mrd_token', t); else localStorage.removeItem('mrd_token'); },
 };
 
-const state = { user: null, chart: null, chartId: null, conversations: [], convId: null, messages: [], sending: false };
+const state = { user: null, lang: localStorage.getItem('mrd_lang') || 'zh', lastPreview: null, lastForm: null, reports: [], sending: false };
 
 const el = (tag, attrs = {}, ...kids) => {
   const n = document.createElement(tag);
@@ -31,40 +33,188 @@ const app = () => document.getElementById('app');
 function toast(msg) {
   const t = el('div', { class: 'toast' }, msg);
   document.body.append(t);
-  setTimeout(() => t.remove(), 2600);
+  setTimeout(() => t.classList.add('in'), 10);
+  setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 300); }, 3400);
 }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m])); }
 
-function esc(s) { return String(s).replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m])); }
+// ---- i18n ----
+const I18N = {
+  zh: {
+    nav_how: '如何运作', nav_stories: '真实故事', nav_pricing: '价格', nav_faq: '常见问题',
+    nav_login: '登录', nav_start: '免费测缘分 →', nav_mine: '我的合盘', nav_new: '新建合盘',
+    nav_account: '隐私与数据', nav_logout: '退出',
+    brand_sub: 'MERIDIAN SYNC',
+    hero_eyebrow: '东方合盘 · 缘分洞察',
+    hero_title: '看懂你俩的缘分',
+    hero_sub: '他到底怎么想？你们能走多远？下一步该怎么做？\n用东方合盘，把说不清的感觉，变成看得懂的答案。',
+    hero_cta: '免费测一次缘分',
+    hero_note: '30 秒出结果 · 无需下载 · 注册即送 3 次完整报告',
+    try_h: '免费测你俩的缘分',
+    try_sub: '填两个人的出生信息，先看免费速览。',
+    rel_romance: '恋爱中', rel_crush: '暧昧 / 单恋', rel_reunion: '想复合', rel_marriage: '备婚 / 合婚', rel_friendship: '朋友 / 合作',
+    label_you: '你', label_ta: 'TA',
+    f_name: '称呼', f_gender: '性别', f_date: '出生日期', f_time: '出生时间', f_place: '出生城市',
+    g_female: '女', g_male: '男',
+    try_btn: '生成免费速览', try_loading: '正在合盘…',
+    preview_score: '缘分总分', preview_locked: '完整报告已锁定',
+    preview_unlock_hint: '解锁后可看：吸引力真相 · 你们的甜蜜与摩擦 · 未来 6 个月运势 · 下一步具体建议',
+    preview_save: '保存并解锁完整报告',
+    preview_login_first: '登录后即可保存并解锁（新用户送 3 次）',
+    problem_h: '你是不是也这样',
+    p1: '他忽冷忽热，我永远猜不透他在想什么。',
+    p2: '我们很相爱，却总为同样的事吵架，不知道问题出在哪。',
+    p3: '分手了，但我还放不下，到底还有没有可能？',
+    p4: '要结婚了，长辈让我们合个八字，我想知道真的合不合。',
+    how_h: '它到底怎么帮你',
+    feat1_t: '把「感觉」变成「答案」',
+    feat1_d: '用天干五合、地支六合、五行生克这些真实的东方合盘方法，算出你俩的吸引力、契合度、长久度——每一条结论都标明依据，不是玄乎的一句话。',
+    feat2_t: '不只是分数，是「下一步」',
+    feat2_d: '我们不只告诉你「合不合」，更告诉你「怎么办」：他为什么忽冷忽热、你们最容易在哪炸、未来 6 个月哪个月适合表白 / 谈事 / 冷处理。',
+    feat3_t: '一张卡片，两个人看',
+    feat3_d: '生成专属缘分卡片，发给 TA、发到闺蜜群。对方点开也想测测自己的——这就是它天然会传播的原因。',
+    stories_h: '他们用它，说清了那句一直说不出口的话',
+    story1: '「测完把卡片发给他，他主动问我要不要试试复合。憋了三个月的话，一张卡片替我说了。」', story1m: '— 小M，26，想复合',
+    story2: '「一直以为是我不够好，报告说我们其实是五行互补，只是节奏不同。那天我们第一次没吵架。」', story2m: '— 阿哲，29，恋爱中',
+    story3: '「备婚焦虑到失眠，合婚报告把双方家庭、性格、节奏都讲透了，我妈看完也放心了。」', story3m: '— Luna，31，备婚',
+    stories_note: '以上为产品使用场景示例，非真实用户承诺；缘分洞察用于增进理解与自我觉察。',
+    pricing_h: '价格',
+    pricing_sub: '先免费测，觉得说到心里了，再决定要不要看完整报告。',
+    plan_free_n: '免费速览', plan_free_p: '¥0', plan_free_d: '注册即送 3 次完整报告解锁',
+    plan_lite_n: '缘分完整报告', plan_lite_p: '¥19', plan_lite_d: '单次 · 一段关系',
+    plan_month_n: '子午会员', plan_month_p: '¥39/月', plan_month_d: '每月 6 份报告 + 无限速览',
+    plan_marry_n: '合婚 · 深度定制', plan_marry_p: '¥399', plan_marry_d: '备婚级 · 双方家庭 + 择日建议',
+    plan_cta_free: '免费开始', plan_cta: '选择', plan_pop: '最受欢迎',
+    faq_h: '常见问题',
+    faq_q1: '这是算命 / 迷信吗？', faq_a1: '它是东方文化视角下的关系洞察工具。所有结论基于八字合盘的传统方法（五合、六合、生克等）与心理反思，用于帮你理解关系、做出更清醒的选择——不预测「命中注定」，也不替你做决定。',
+    faq_q2: '会不会像某些 App 那样偷偷扣费、自动续费坑人？', faq_a2: '不会。我们最讨厌这种套路。会员随时可取消，单次报告就是单次，绝不默认勾选自动续费、绝不隐藏扣费。这是我们的底线。',
+    faq_q3: '需要对方配合吗？', faq_a3: '不需要。你只要知道对方的出生日期（时间/城市更准），就能生成合盘。当然，把卡片发给 TA 一起看，体验会更好。',
+    faq_q4: '我的隐私安全吗？', faq_a4: '出生信息仅用于合盘计算。分享卡片上不含任何出生隐私。你可随时导出或永久删除全部数据。',
+    faq_q5: '准不准？', faq_a5: '我们不吹「100% 准确」——那是骗人的。每份报告你都能反馈「说中了 / 部分 / 没说中」，我们用这些反馈持续校准。诚实，是我们唯一的护城河。',
+    cta_h: '别再一个人猜了',
+    cta_sub: '30 秒，先免费看看你俩的缘分速览。',
+    cta_btn: '免费测一次',
+    foot_tag: '东方合盘 · 缘分洞察',
+    foot_disc: '子午·合盘提供东方文化视角下的关系洞察，用于增进理解与自我觉察，不构成婚恋、医疗、法律或投资建议。',
+    mine_h: '我的合盘', mine_new: '+ 新建合盘',
+    mine_empty_t: '还没有合盘记录', mine_empty_d: '测一次你俩的缘分，30 秒出结果。', mine_empty_btn: '开始第一次合盘',
+    new_h: '新建合盘',
+    unlock_h: '解锁完整报告', unlock_credits: '你还有 {n} 次免费解锁',
+    unlock_btn_free: '用 1 次额度解锁（免费）', unlock_btn_pay: '解锁需要额度，去获取',
+    unlock_member: '会员可无限解锁',
+    rep_strengths: '你们的甜蜜 / 优势', rep_frictions: '容易踩的坑', rep_dynamic: '你俩的相处模式',
+    rep_advice: '下一步该怎么做', rep_timing: '未来 6 个月运势',
+    rep_share: '生成缘分卡片分享', rep_feedback_q: '这份报告说到你心里了吗？',
+    fb_hit: '说中了', fb_part: '部分说中', fb_miss: '没说中', fb_thanks: '谢谢你的反馈，它让我们更准。',
+    acct_h: '隐私与数据',
+    lang_toggle: 'EN',
+  },
+  en: {
+    nav_how: 'How it works', nav_stories: 'Stories', nav_pricing: 'Pricing', nav_faq: 'FAQ',
+    nav_login: 'Log in', nav_start: 'Free reading →', nav_mine: 'My readings', nav_new: 'New reading',
+    nav_account: 'Privacy & Data', nav_logout: 'Log out',
+    brand_sub: 'MERIDIAN SYNC',
+    hero_eyebrow: 'Eastern Synastry · Relationship Insight',
+    hero_title: 'Understand what you two really are',
+    hero_sub: 'What is he really thinking? How far can you go? What should you do next?\nEastern synastry turns a feeling you can\u2019t explain into an answer you can act on.',
+    hero_cta: 'Get a free reading',
+    hero_note: '30-second result · No download · 3 full reports free on sign-up',
+    try_h: 'Free compatibility reading',
+    try_sub: 'Enter both birth details for a free preview.',
+    rel_romance: 'Dating', rel_crush: 'Crush / one-sided', rel_reunion: 'Want to reunite', rel_marriage: 'Marriage match', rel_friendship: 'Friends / partners',
+    label_you: 'You', label_ta: 'Them',
+    f_name: 'Name', f_gender: 'Gender', f_date: 'Birth date', f_time: 'Birth time', f_place: 'Birth city',
+    g_female: 'Female', g_male: 'Male',
+    try_btn: 'Generate free preview', try_loading: 'Syncing…',
+    preview_score: 'Compatibility', preview_locked: 'Full report locked',
+    preview_unlock_hint: 'Unlock to see: the truth of your attraction · sweetness & friction · next 6 months · what to do next',
+    preview_save: 'Save & unlock full report',
+    preview_login_first: 'Log in to save & unlock (3 free for new users)',
+    problem_h: 'Sound familiar?',
+    p1: 'He runs hot and cold — I can never tell what he\u2019s thinking.',
+    p2: 'We love each other but fight over the same thing again and again.',
+    p3: 'We broke up but I can\u2019t let go. Is there still a chance?',
+    p4: 'We\u2019re getting married and the elders want a compatibility check.',
+    how_h: 'How it actually helps you',
+    feat1_t: 'Turn a feeling into an answer',
+    feat1_d: 'Real Eastern synastry methods — stem combinations, branch harmonies, five-element cycles — compute your attraction, fit and longevity. Every conclusion cites its basis.',
+    feat2_t: 'Not just a score — a next step',
+    feat2_d: 'We don\u2019t just say whether you match. We tell you why he blows hot and cold, where you\u2019ll clash, and which of the next 6 months suits confessing / talking / stepping back.',
+    feat3_t: 'One card, two people',
+    feat3_d: 'Generate a shareable compatibility card. Send it to them or your group chat. They\u2019ll want to test their own — that\u2019s why it spreads.',
+    stories_h: 'People used it to finally say the thing',
+    story1: '“I sent him the card. He asked me himself if we should try again. Three months of words — one card said them.”', story1m: '— Mia, 26, reuniting',
+    story2: '“I thought I wasn\u2019t good enough. The report said we complement each other, just at different tempos.”', story2m: '— Zhe, 29, dating',
+    story3: '“Wedding anxiety kept me up. The marriage report walked through both families — even my mother relaxed.”', story3m: '— Luna, 31, engaged',
+    stories_note: 'Illustrative usage scenarios, not user guarantees. Insights are for reflection and self-awareness.',
+    pricing_h: 'Pricing',
+    pricing_sub: 'Read free first. If it speaks to you, then unlock the full report.',
+    plan_free_n: 'Free preview', plan_free_p: '$0', plan_free_d: '3 full-report unlocks on sign-up',
+    plan_lite_n: 'Full report', plan_lite_p: '$3', plan_lite_d: 'One-time · one relationship',
+    plan_month_n: 'Meridian Member', plan_month_p: '$6/mo', plan_month_d: '6 reports/mo + unlimited previews',
+    plan_marry_n: 'Marriage · Deluxe', plan_marry_p: '$59', plan_marry_d: 'Both families + timing advice',
+    plan_cta_free: 'Start free', plan_cta: 'Choose', plan_pop: 'Most popular',
+    faq_h: 'FAQ',
+    faq_q1: 'Is this fortune-telling / superstition?', faq_a1: 'It\u2019s a relationship-insight tool through an Eastern-culture lens. Conclusions are based on traditional synastry methods and psychological reflection — to help you understand a relationship and choose clearly. It does not predict destiny or decide for you.',
+    faq_q2: 'Will it secretly auto-charge me like some apps?', faq_a2: 'No. We hate that. Cancel any time; one-time is one-time; no pre-checked auto-renew, no hidden charges. That\u2019s our line.',
+    faq_q3: 'Do I need the other person?', faq_a3: 'No. Just their birth date (time/city improve accuracy). Sharing the card together is a nicer experience though.',
+    faq_q4: 'Is my privacy safe?', faq_a4: 'Birth info is used only for the calculation. Share cards contain no birth privacy. Export or permanently delete all your data any time.',
+    faq_q5: 'Is it accurate?', faq_a5: 'We won\u2019t claim 100% accuracy — that\u2019s a lie. You can rate each report hit / partial / miss, and we calibrate on it. Honesty is our only moat.',
+    cta_h: 'Stop guessing alone',
+    cta_sub: '30 seconds. See your free compatibility preview.',
+    cta_btn: 'Get a free reading',
+    foot_tag: 'Eastern Synastry · Relationship Insight',
+    foot_disc: 'Meridian Sync offers relationship insight through an Eastern-culture lens for reflection and self-awareness. Not medical, legal, or investment advice.',
+    mine_h: 'My readings', mine_new: '+ New reading',
+    mine_empty_t: 'No readings yet', mine_empty_d: 'Read your compatibility — 30 seconds.', mine_empty_btn: 'Start your first reading',
+    new_h: 'New reading',
+    unlock_h: 'Unlock full report', unlock_credits: 'You have {n} free unlocks',
+    unlock_btn_free: 'Unlock with 1 credit (free)', unlock_btn_pay: 'Get unlock credits',
+    unlock_member: 'Members unlock unlimited',
+    rep_strengths: 'Your strengths', rep_frictions: 'Where you\u2019ll clash', rep_dynamic: 'Your dynamic',
+    rep_advice: 'What to do next', rep_timing: 'Next 6 months',
+    rep_share: 'Create a share card', rep_feedback_q: 'Did this report speak to you?',
+    fb_hit: 'Spot on', fb_part: 'Partly', fb_miss: 'Missed', fb_thanks: 'Thanks — this makes us more accurate.',
+    acct_h: 'Privacy & Data',
+    lang_toggle: '中文',
+  },
+};
+function t(k, vars) {
+  let s = (I18N[state.lang] && I18N[state.lang][k]) || (I18N.zh[k]) || k;
+  if (vars) for (const [kk, vv] of Object.entries(vars)) s = s.replace(`{${kk}}`, vv);
+  return s;
+}
+function setLang(l) { state.lang = l; localStorage.setItem('mrd_lang', l); render(); }
 
-// simple hash router
+const REL_TYPES = ['romance', 'crush', 'reunion', 'marriage', 'friendship'];
+const REL_LABELS = () => ({ romance: t('rel_romance'), crush: t('rel_crush'), reunion: t('rel_reunion'), marriage: t('rel_marriage'), friendship: t('rel_friendship') });
+
+// ---- router ----
 const routes = {};
 function route(name, fn) { routes[name] = fn; }
 function go(name) { location.hash = name; }
 window.addEventListener('hashchange', render);
 
-// ---- backdrop (no-op in refined light theme) ----
-function ensureBackdrop() {}
-
 // ---- nav ----
 function navBar() {
+  const langBtn = el('button', { class: 'lang-btn', onclick: () => setLang(state.lang === 'zh' ? 'en' : 'zh') }, t('lang_toggle'));
   const links = state.user
-    ? [el('a', { href: '#decisions' }, '决策台'), el('a', { href: '#app' }, '对话'),
-       el('a', { href: '#account' }, '隐私与数据'), el('a', { href: '#pricing' }, '会员'),
-       el('a', { class: 'btn btn-ghost', onclick: logout }, '退出')]
-    : [el('a', { href: '#product' }, '产品'), el('a', { href: '#how' }, '如何运作'),
-       el('a', { href: '#pricing' }, '定价'), el('a', { href: '#faq' }, '常见问题'),
-       el('a', { class: 'btn btn-ghost', onclick: () => openAuth('login') }, '登录'),
-       el('a', { class: 'btn btn-gold', onclick: () => openAuth('register') }, '免费开始 →')];
+    ? [el('a', { href: '#mine' }, t('nav_mine')), el('a', { href: '#new' }, t('nav_new')),
+       el('a', { href: '#account' }, t('nav_account')), el('a', { href: '#pricing' }, t('nav_pricing')),
+       langBtn, el('a', { class: 'btn btn-ghost', onclick: logout }, t('nav_logout'))]
+    : [el('a', { href: '#how' }, t('nav_how')), el('a', { href: '#stories' }, t('nav_stories')),
+       el('a', { href: '#pricing' }, t('nav_pricing')), el('a', { href: '#faq' }, t('nav_faq')),
+       langBtn, el('a', { class: 'btn btn-ghost', onclick: () => openAuth('login') }, t('nav_login')),
+       el('a', { class: 'btn btn-gold', onclick: () => openAuth('register') }, t('nav_start'))];
   const menu = el('div', { class: 'nav-links' }, ...links);
-  const toggle = el('button', { class: 'nav-toggle', 'aria-label': '菜单', onclick: () => menu.classList.toggle('open') },
+  const toggle = el('button', { class: 'nav-toggle', 'aria-label': 'menu', onclick: () => menu.classList.toggle('open') },
     el('span', { html: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>' }));
   menu.addEventListener('click', (e) => { if (e.target.tagName === 'A') menu.classList.remove('open'); });
   const nav = el('nav', {}, el('div', { class: 'wrap' },
-    el('a', { class: 'brand', href: state.user ? '#app' : '#home' },
-      el('span', { class: 'mark' }, '子'),
-      el('span', {}, '子午', el('small', {}, 'MERIDIAN'))),
+    el('a', { class: 'brand', href: state.user ? '#mine' : '#home' },
+      el('span', { class: 'mark' }, '合'),
+      el('span', {}, '子午·合盘', el('small', {}, t('brand_sub')))),
     el('div', { style: 'display:flex;align-items:center;gap:10px' }, menu, toggle)));
-  // scrolled state
   setTimeout(() => {
     const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
     onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
@@ -72,7 +222,6 @@ function navBar() {
   return nav;
 }
 
-// reveal-on-scroll observer
 let _io;
 function observeReveals() {
   if (!('IntersectionObserver' in window)) { document.querySelectorAll('.reveal').forEach((n) => n.classList.add('in')); return; }
@@ -83,248 +232,295 @@ function observeReveals() {
   document.querySelectorAll('.reveal').forEach((n) => _io.observe(n));
 }
 
-async function logout() { API.setToken(null); state.user = null; state.chart = null; state.convId = null; go('home'); }
+async function logout() { API.setToken(null); state.user = null; state.reports = []; go('home'); }
 
-// bootstrap session
 async function boot() {
-  ensureBackdrop();
   if (API.token) {
     try { const { user } = await API.call('/me'); state.user = user; } catch { API.setToken(null); }
   }
-  if (!location.hash) location.hash = state.user ? 'app' : 'home';
+  if (!location.hash) location.hash = state.user ? 'mine' : 'home';
   render();
 }
 
-// ---- compact refined natal wheel (secondary decoration only) ----
-function natalWheel() {
-  const branches = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
-  const R = 96, r = 62, cx = 100, cy = 100;
-  let paths = '', labels = '';
-  for (let i = 0; i < 12; i++) {
-    const a0 = (i * 30 - 90) * Math.PI / 180, a1 = ((i + 1) * 30 - 90) * Math.PI / 180;
-    const x0o = cx + R * Math.cos(a0), y0o = cy + R * Math.sin(a0);
-    const x1o = cx + R * Math.cos(a1), y1o = cy + R * Math.sin(a1);
-    const x0i = cx + r * Math.cos(a0), y0i = cy + r * Math.sin(a0);
-    const x1i = cx + r * Math.cos(a1), y1i = cy + r * Math.sin(a1);
-    paths += `<path d="M${x0o},${y0o} A${R},${R} 0 0 1 ${x1o},${y1o} L${x1i},${y1i} A${r},${r} 0 0 0 ${x0i},${y0i} Z" fill="${i%2?'rgba(169,128,58,.05)':'rgba(169,128,58,.09)'}" stroke="rgba(169,128,58,.25)" stroke-width=".8"/>`;
-    const am = (i * 30 + 15 - 90) * Math.PI / 180, rm = (R + r) / 2;
-    labels += `<text x="${cx + rm*Math.cos(am)}" y="${cy + rm*Math.sin(am)+4}" text-anchor="middle" fill="#a9803a" font-size="10" font-family="Noto Serif SC,serif">${branches[i]}</text>`;
-  }
-  return `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="96" fill="none" stroke="rgba(169,128,58,.3)" stroke-width="1"/><circle cx="100" cy="100" r="62" fill="none" stroke="rgba(169,128,58,.2)" stroke-width=".8"/><circle cx="100" cy="100" r="34" fill="none" stroke="rgba(169,128,58,.15)" stroke-width=".8"/>${paths}${labels}<text x="100" y="104" text-anchor="middle" fill="#a9803a" font-size="13" font-family="Noto Serif SC,serif">命盘</text></svg>`;
+// ============================================================
+//  visual building blocks
+// ============================================================
+function scoreTone(v) { return v >= 78 ? 'high' : v >= 55 ? 'steady' : 'caution'; }
+function dimBar(label, val) {
+  const tone = val >= 72 ? 'gold' : val >= 50 ? '' : 'warn';
+  return el('div', { class: 'dim-row' },
+    el('span', { class: 'dim-label' }, label),
+    el('div', { class: 'dim-track' }, el('i', { class: 'dim-fill ' + tone, style: `width:${val}%` })),
+    el('span', { class: 'dim-val' }, String(val)));
 }
 
-// ---- hero product preview (a real Decision-OS mock, not a gaudy wheel) ----
-function heroPreview() {
-  return el('div', { class: 'preview' },
-    el('div', { class: 'preview-card' },
-      el('div', { class: 'preview-bar' },
-        el('i', {}), el('i', {}), el('i', {}),
-        el('span', { class: 'u' }, 'meridian.app/decisions')),
-      el('div', { class: 'preview-body' },
-        el('div', { class: 'pv-title' }, '要不要接受 B 公司的 offer？'),
-        el('div', { class: 'pv-q' }, '决策工作区 · 2 个选项 · AI 结构化分析'),
-        el('div', { class: 'pv-cols' },
-          el('div', { class: 'pv-opt rec' },
-            el('h5', {}, '接受 offer', el('span', { class: 'tag' }, '推荐参考')),
-            el('div', { class: 'pv-bar' }, el('i', { style: 'width:64%' })),
-            el('div', { class: 'pv-meta' }, '成功概率 64% · 上行：成长快\n止损：3 个月无绩效即复盘')),
-          el('div', { class: 'pv-opt' },
-            el('h5', {}, '维持现状'),
-            el('div', { class: 'pv-bar' }, el('i', { style: 'width:41%' })),
-            el('div', { class: 'pv-meta' }, '成功概率 41% · 稳定但停滞\n下行：错过窗口期'))),
-        el('div', { class: 'pv-flags' },
-          el('span', { class: 'pv-flag fact' }, '事实 3'),
-          el('span', { class: 'pv-flag' }, '需验证的假设 2'),
-          el('span', { class: 'pv-flag risk' }, '风险 2'),
-          el('span', { class: 'pv-flag' }, '文化反思镜头 · 可选')))),
-    el('div', { class: 'preview-float a' }, el('span', { class: 'ic' }, '✓'), el('div', {}, el('b', {}, '事实与假设已分离'), el('br'), el('small', { style: 'color:var(--text-3)' }, 'AI 不替你拍板'))),
-    el('div', { class: 'preview-float b' }, el('span', { class: 'ic' }, '🛡'), el('div', {}, el('b', {}, '止损线已设定'), el('br'), el('small', { style: 'color:var(--text-3)' }, '30/90 天自动复盘'))));
+// the signature compatibility card (hero + share artifact)
+function syncCard(data, opts = {}) {
+  const { overall, keyword, dims, hook, meta } = data;
+  const nameA = (meta && meta.nameA) || t('label_you');
+  const nameB = (meta && meta.nameB) || t('label_ta');
+  const ring = el('div', { class: 'sc-ring ' + scoreTone(overall), style: `--p:${overall}` },
+    el('div', { class: 'sc-ring-inner' }, el('b', {}, String(overall)), el('small', {}, t('preview_score'))));
+  const dimEls = dims ? Object.entries(dims).map(([k, v]) => dimBar(k, v)) : [];
+  return el('div', { class: 'sync-card ' + (opts.variant || '') },
+    el('div', { class: 'sc-head' },
+      el('div', { class: 'sc-names' }, el('span', {}, nameA), el('i', { class: 'sc-amp' }, '❤'), el('span', {}, nameB)),
+      el('div', { class: 'sc-brand' }, '子午·合盘')),
+    el('div', { class: 'sc-top' }, ring,
+      el('div', { class: 'sc-key' }, el('div', { class: 'sc-keyword' }, keyword || ''),
+        hook ? el('div', { class: 'sc-hook' }, '「' + hook + '」') : null)),
+    dimEls.length ? el('div', { class: 'sc-dims' }, ...dimEls) : null);
 }
 
-route('home', () => {
-  const hero = el('section', { class: 'hero' },
-    el('div', { class: 'hero-mesh' }),
+// ============================================================
+//  free funnel (two-person form + preview)
+// ============================================================
+function personBlock(which) {
+  const isA = which === 'a';
+  const pref = isA ? t('label_you') : t('label_ta');
+  const f = state.lastForm && state.lastForm[which] ? state.lastForm[which] : {};
+  const nameI = el('input', { type: 'text', placeholder: pref, value: f.name || '' });
+  const genderSel = el('select', {},
+    el('option', { value: 'female' }, t('g_female')),
+    el('option', { value: 'male' }, t('g_male')));
+  genderSel.value = f.gender || (isA ? 'female' : 'male');
+  const dateI = el('input', { type: 'date', value: f.date || '' });
+  const timeI = el('input', { type: 'time', value: f.time || '' });
+  const placeI = el('input', { type: 'text', placeholder: isA ? '如 上海' : '如 北京', value: f.place || '' });
+  const block = el('div', { class: 'person-block ' + which },
+    el('div', { class: 'pb-head' }, el('span', { class: 'pb-dot' }, isA ? 'A' : 'B'), el('b', {}, pref)),
+    el('div', { class: 'pb-grid' },
+      el('label', { class: 'pb-field' }, el('span', {}, t('f_name')), nameI),
+      el('label', { class: 'pb-field' }, el('span', {}, t('f_gender')), genderSel),
+      el('label', { class: 'pb-field' }, el('span', {}, t('f_date')), dateI),
+      el('label', { class: 'pb-field' }, el('span', {}, t('f_time')), timeI),
+      el('label', { class: 'pb-field pb-wide' }, el('span', {}, t('f_place')), placeI)));
+  block._read = () => ({ name: nameI.value.trim(), gender: genderSel.value, date: dateI.value, time: timeI.value || '12:00', place: placeI.value.trim(), lon: 120 });
+  return block;
+}
+
+function tryFunnel() {
+  let relType = (state.lastForm && state.lastForm.relType) || 'crush';
+  const chips = el('div', { class: 'rel-chips' });
+  const labels = REL_LABELS();
+  const rebuildChips = () => {
+    chips.innerHTML = '';
+    REL_TYPES.forEach((r) => chips.append(el('button', {
+      class: 'rel-chip' + (r === relType ? ' on' : ''),
+      onclick: () => { relType = r; rebuildChips(); },
+    }, labels[r])));
+  };
+  rebuildChips();
+  const blockA = personBlock('a');
+  const blockB = personBlock('b');
+  const out = el('div', { class: 'try-out' });
+  const btn = el('button', { class: 'btn btn-gold btn-lg', style: 'width:100%' }, t('try_btn'));
+  btn.addEventListener('click', async () => {
+    const a = blockA._read(), b = blockB._read();
+    if (!a.date || !b.date) { toast(state.lang === 'zh' ? '请填两个人的出生日期' : 'Please enter both birth dates'); return; }
+    state.lastForm = { relType, a, b };
+    btn.disabled = true; btn.textContent = t('try_loading');
+    try {
+      const { preview } = await API.call('/sync/preview', { method: 'POST', body: { rel_type: relType, a, b } });
+      state.lastPreview = preview;
+      out.innerHTML = '';
+      out.append(previewCard(preview));
+      out.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (e) { toast(e.message); }
+    finally { btn.disabled = false; btn.textContent = t('try_btn'); }
+  });
+  return el('div', { class: 'try-box reveal', id: 'try' },
+    el('div', { class: 'try-head' }, el('h3', {}, t('try_h')), el('p', {}, t('try_sub'))),
+    el('div', { class: 'rel-chips-wrap' }, chips),
+    el('div', { class: 'two-persons' }, blockA, blockB),
+    btn, out);
+}
+
+function previewCard(preview) {
+  const card = syncCard({
+    overall: preview.overall, keyword: preview.keyword, dims: preview.dims, hook: preview.hook,
+    meta: { nameA: preview.name_a, nameB: preview.name_b },
+  }, { variant: 'preview' });
+  const lc = preview.locked_counts || {};
+  const teaser = el('div', { class: 'locked-teaser' },
+    el('div', { class: 'lt-lock' }, '🔒 ' + t('preview_locked')),
+    el('div', { class: 'lt-hint' }, t('preview_unlock_hint')),
+    el('div', { class: 'lt-counts' },
+      el('span', {}, (lc.strengths || 0) + ' ' + (state.lang === 'zh' ? '条优势' : 'strengths')),
+      el('span', {}, (lc.frictions || 0) + ' ' + (state.lang === 'zh' ? '个坑' : 'frictions')),
+      el('span', {}, (lc.advice || 0) + ' ' + (state.lang === 'zh' ? '条建议' : 'advice')),
+      el('span', {}, (lc.timing || 6) + ' ' + (state.lang === 'zh' ? '个月运势' : 'months'))),
+    state.user
+      ? el('button', { class: 'btn btn-gold', style: 'width:100%', onclick: saveAndOpen }, t('preview_save'))
+      : el('div', {},
+          el('button', { class: 'btn btn-gold', style: 'width:100%', onclick: () => openAuth('register') }, t('preview_save')),
+          el('div', { class: 'lt-note' }, t('preview_login_first'))));
+  return el('div', { class: 'preview-result' }, card, teaser);
+}
+
+async function saveAndOpen() {
+  if (!state.user) { openAuth('register'); return; }
+  const f = state.lastForm;
+  if (!f) { toast('请先生成速览'); return; }
+  try {
+    const res = await API.call('/sync/relationships', {
+      method: 'POST',
+      body: { rel_type: f.relType, a: f.a, b: f.b },
+    });
+    go('report/' + res.report_id);
+  } catch (e) { toast(e.message); }
+}
+
+// ============================================================
+//  HOME (landing)
+// ============================================================
+function featureRow(idx, tKey, dKey, mock) {
+  return el('div', { class: 'feature-row reveal ' + (idx % 2 ? 'rev' : '') },
+    el('div', { class: 'fr-copy' },
+      el('div', { class: 'fr-num' }, '0' + (idx + 1)),
+      el('h3', {}, t(tKey)), el('p', {}, t(dKey))),
+    el('div', { class: 'fr-visual' }, mock));
+}
+
+function mockCardHero() {
+  return syncCard({
+    overall: 82, keyword: state.lang === 'zh' ? '互相成就的缘分' : 'A relationship that lifts you both',
+    dims: { [state.lang === 'zh' ? '吸引力' : 'Attraction']: 88, [state.lang === 'zh' ? '契合度' : 'Fit']: 79, [state.lang === 'zh' ? '滋养度' : 'Nourish']: 84, [state.lang === 'zh' ? '共鸣度' : 'Resonance']: 76, [state.lang === 'zh' ? '长久度' : 'Longevity']: 81, [state.lang === 'zh' ? '稳定度' : 'Stability']: 80 },
+    hook: state.lang === 'zh' ? 'TA的「水」润你的「木」——你在TA身边会慢慢舒展' : 'Their Water nourishes your Wood — you unfold beside them',
+    meta: { nameA: state.lang === 'zh' ? '你' : 'You', nameB: 'TA' },
+  }, { variant: 'hero' });
+}
+
+function storiesSection() {
+  const items = [['story1', 'story1m'], ['story2', 'story2m'], ['story3', 'story3m']];
+  return el('section', { class: 'section stories', id: 'stories' },
     el('div', { class: 'wrap' },
-      el('div', { class: 'hero-grid' },
-        el('div', {},
-          el('span', { class: 'eyebrow' }, '个人决策操作系统'),
-          el('h1', { html: '把重大选择，<em>想清楚</em><br>再落地。' }),
-          el('p', { class: 'lead' }, '子午 Meridian 帮你把人生的关键决策——换工作、创业、搬迁、重大投入——拆成事实、假设、选项与风险，结构化地想明白，而不是凭一时冲动或一句「大师说」。'),
-          el('p', { class: 'sub' }, '东方命理（八字 / 紫微）仅作为可选的文化反思镜头，帮助自我觉察，绝不替你做决定，也不作现实因果保证。'),
-          el('div', { class: 'hero-cta' },
-            el('a', { class: 'btn btn-gold btn-lg', onclick: () => openAuth('register') }, '免费开始', el('span', { class: 'arw' }, '→')),
-            el('a', { class: 'btn btn-ghost btn-lg', href: '#how' }, '看它如何运作')),
-          el('div', { class: 'hero-note' }, el('span', { class: 'dot' }), '无需信用卡 · 数据由你掌控 · 随时导出或删除')),
-        el('div', {}, heroPreview()))),
-    el('div', { class: 'wrap' },
-      el('div', { class: 'metrics reveal' },
-        el('div', { class: 'm' }, el('b', {}, '4 类'), el('span', {}, '事实 / 假设 / 文化 / 风险，清晰分层')),
-        el('div', { class: 'm' }, el('b', {}, '16 字段'), el('span', {}, '结构化决策分析，不是一句模糊建议')),
-        el('div', { class: 'm' }, el('b', {}, '30/90 天'), el('span', {}, '决策后复盘，帮你校准判断力')))));
+      el('h2', { class: 'section-title reveal' }, t('stories_h')),
+      el('div', { class: 'stories-grid' },
+        ...items.map(([q, m]) => el('div', { class: 'story reveal' },
+          el('div', { class: 'story-q' }, t(q)), el('div', { class: 'story-m' }, t(m))))),
+      el('p', { class: 'stories-note reveal' }, t('stories_note'))));
+}
 
-  // problem framing — dark editorial band
-  const problem = el('section', { class: 'blk', style: 'background:var(--bg-ink);color:var(--text-inv)' },
-    el('div', { class: 'wrap on-dark', style: 'text-align:center;max-width:760px' },
-      el('span', { class: 'eyebrow' }, '为什么需要它'),
-      el('h2', { style: 'font-family:var(--serif);font-size:clamp(26px,3.6vw,40px);font-weight:600;color:#fff;margin:16px 0 18px;letter-spacing:-.02em', html: '真正改变命运的，是<em style="color:var(--gold-2);font-style:italic">那几个重大决策</em>' }),
-      el('p', { style: 'color:var(--text-inv-2);font-size:18px;line-height:1.6' }, '大多数人不是败在努力，而是败在关键路口拍脑袋、只看利好、没设止损、事后从不复盘。子午把「想清楚」变成一套可重复、可验证的流程——这正是拉开长期差距的地方。')));
-
-  // product — alternating editorial feature rows (NOT card soup)
-  const product = el('section', { class: 'blk', id: 'product' }, el('div', { class: 'wrap' },
-    el('div', { class: 'sec-head' },
-      el('span', { class: 'eyebrow', style: 'margin-bottom:14px' }, '产品'),
-      el('h2', {}, '一套完整的决策闭环'),
-      el('p', {}, '从把问题问清楚，到落地执行与复盘校准——每一步都有结构，而不是聊两句就结束。')),
-
-    el('div', { class: 'feature-row reveal' },
-      el('div', { class: 'fr-text' },
-        el('div', { class: 'num' }, '01 / 结构化'),
-        el('h3', {}, '把纠结，拆成可分析的结构'),
-        el('p', {}, '写下你真正在纠结什么，系统引导你补齐目标、硬约束、可承受的最大损失与可逆性——决策质量，从把问题问对开始。'),
-        el('ul', { class: 'fr-list' },
-          el('li', {}, '目标与价值排序，避免被单一诱因带偏'),
-          el('li', {}, '「可承受损失」优先，而非只盯着最好情况'),
-          el('li', {}, '可逆 / 不可逆判断，决定该多谨慎'))),
-      el('div', { class: 'fr-media' },
-        el('div', { class: 'panel' },
-          el('div', { class: 'panel-h' }, '决策概要', el('span', { class: 'pill' }, '待梳理')),
-          el('div', { class: 'panel-b' },
-            el('div', { class: 'dec-tagrow', style: 'margin:0 0 12px' }, el('span', { class: 'dec-tag-lab' }, '目标'), el('span', { class: 'dec-tag' }, '收入增长'), el('span', { class: 'dec-tag' }, '自主性')),
-            el('div', { class: 'dec-tagrow', style: 'margin:0 0 12px' }, el('span', { class: 'dec-tag-lab' }, '硬约束'), el('span', { class: 'dec-tag' }, '6 个月内不断供房贷')),
-            el('div', { class: 'dec-meta', style: 'margin:0' }, el('span', {}, '🛡 可承受损失：6 个月生活费'), el('span', {}, '🔁 部分可逆')))))),
-
-    el('div', { class: 'feature-row rev reveal' },
-      el('div', { class: 'fr-text' },
-        el('div', { class: 'num' }, '02 / 分层'),
-        el('h3', {}, '事实、假设、文化、风险——泾渭分明'),
-        el('p', {}, 'AI 给出的每条信息都被标注来源：哪些是确凿事实，哪些是需要你验证的假设，哪些只是文化反思镜头，哪些是风险。它绝不把命理当成现实因果，也绝不替你拍板。'),
-        el('ul', { class: 'fr-list' },
-          el('li', {}, '已知事实与需验证的假设分开呈现'),
-          el('li', {}, '东方命理仅作可选的自我反思视角'),
-          el('li', {}, '每次输出都带明确免责，最终决定权在你'))),
-      el('div', { class: 'fr-media' },
-        el('div', { class: 'panel' },
-          el('div', { class: 'panel-h' }, 'AI 结构化分析', el('span', { class: 'pill' }, '16 字段')),
-          el('div', { class: 'panel-b' },
-            el('div', { class: 'epi' },
-              el('div', { class: 'epi-row epi-fact' }, el('h6', {}, '✅ 已知事实'), el('p', {}, 'B 公司薪资高出 28%，通勤时间 +40 分钟')),
-              el('div', { class: 'epi-row epi-assume' }, el('h6', {}, '❓ 需验证的假设'), el('p', {}, '「团队成长空间更大」——尚无客观证据，建议核实')),
-              el('div', { class: 'epi-row epi-culture' }, el('h6', {}, '🀄 文化反思镜头'), el('p', {}, '仅供自我觉察，非决策依据')),
-              el('div', { class: 'epi-row epi-risk' }, el('h6', {}, '⚠ 风险'), el('p', {}, '试用期不通过的收入断档风险'))))))),
-
-    el('div', { class: 'feature-row reveal' },
-      el('div', { class: 'fr-text' },
-        el('div', { class: 'num' }, '03 / 落地'),
-        el('h3', {}, '决定之后，还有执行与复盘'),
-        el('p', {}, '把决策拆成 7 天内可验证的具体行动，设定止损线；30 / 90 天后回来记录真实结果——系统据此帮你校准判断力。决策的价值，在闭环。'),
-        el('ul', { class: 'fr-list' },
-          el('li', {}, '行动计划：负责人 + 截止日'),
-          el('li', {}, '止损条件：出现什么信号就退出'),
-          el('li', {}, '复盘校准：当初的判断到底准不准'))),
-      el('div', { class: 'fr-media' },
-        el('div', { class: 'panel' },
-          el('div', { class: 'panel-h' }, '行动与复盘', el('span', { class: 'pill' }, '执行中')),
-          el('div', { class: 'panel-b' },
-            el('div', { class: 'act-item', style: 'margin-bottom:10px' }, el('span', { class: 'act-check act-done' }, '✓'), el('div', {}, el('div', { class: 'act-txt' }, '约 2 位业内前辈了解 B 公司真实情况'), el('div', { class: 'act-meta' }, '本周 · 已完成'))),
-            el('div', { class: 'act-item' }, el('span', { class: 'act-check' }, '○'), el('div', {}, el('div', { class: 'act-txt' }, '与现主管沟通调岗可能性'), el('div', { class: 'act-meta' }, '截止 3 天后')))))))));
-
-  // how it works — refined steps
-  const how = el('section', { class: 'blk tint', id: 'how' }, el('div', { class: 'wrap' },
-    el('div', { class: 'sec-head' },
-      el('span', { class: 'eyebrow', style: 'margin-bottom:14px' }, '如何运作'),
-      el('h2', {}, '三步，从纠结到清晰')),
-    el('div', { class: 'steps' },
-      ...[['1', '写下决策', '用一句话说清你在纠结什么，补上目标、约束与可承受的损失。可选绑定命盘作为文化反思。'],
-          ['2', '结构化分析', '系统把事实、假设、文化视角、风险、选项概率分层呈现，给出仅供参考的建议，绝不替你决定。'],
-          ['3', '执行与复盘', '拆出可验证的行动、设定止损线，30/90 天后复盘真实结果，逐步校准你的判断力。']]
-        .map(([n, t, d]) => el('div', { class: 'step reveal' }, el('div', { class: 'n' }, n), el('h4', {}, t), el('p', {}, d))))));
-
-  app().append(navBar(), hero, problem, product, how, pricingSection(), faqSection(), ctaSection(), footer());
-  observeReveals();
-});
-
-// ---- pricing ----
 function pricingSection() {
   const plans = [
-    { name: '体验', price: '¥0', per: '', desc: '先免费用起来，认可价值再升级', feats: ['排盘（八字 + 紫微，附置信度与免责）', '1 个决策工作区', '3 次 AI 结构化分析', '文化反思镜头（可选开关）'], cta: '免费开始', act: () => state.user ? go('app') : openAuth('register'), feat: false },
-    { name: 'Core 月度', price: '¥59', per: '/月', desc: '为持续做重大决策的你', feats: ['每月 300 次 AI 分析（公平使用）', '最多 20 个活跃决策', '选项对比 / 证据 / 风险矩阵', '行动计划 + 复盘提醒', '用户可控的长期记忆', '报告导出'], cta: '订阅 Core', act: () => upgrade('core_monthly'), feat: true },
-    { name: 'Decision Pack', price: '¥199', per: '/次', desc: '针对单个高风险重大决策', feats: ['针对单个重大决策的深度分析', '结构化深度报告', '完整行动方案 + 止损设计', '30 / 90 天复盘机制'], cta: '购买单次', act: () => upgrade('pack_single'), feat: false },
+    { code: 'free', n: 'plan_free_n', p: 'plan_free_p', d: 'plan_free_d', cta: 'plan_cta_free', action: () => openAuth('register') },
+    { code: 'report_lite', n: 'plan_lite_n', p: 'plan_lite_p', d: 'plan_lite_d', cta: 'plan_cta', pop: true, action: () => upgrade('report_lite') },
+    { code: 'sync_monthly', n: 'plan_month_n', p: 'plan_month_p', d: 'plan_month_d', cta: 'plan_cta', action: () => upgrade('sync_monthly') },
+    { code: 'report_marriage', n: 'plan_marry_n', p: 'plan_marry_p', d: 'plan_marry_d', cta: 'plan_cta', action: () => upgrade('report_marriage') },
   ];
-  return el('section', { class: 'blk', id: 'pricing' }, el('div', { class: 'wrap' },
-    el('div', { class: 'sec-head' },
-      el('span', { class: 'eyebrow', style: 'margin-bottom:14px' }, '定价'),
-      el('h2', {}, '透明定价，随时取消'),
-      el('p', {}, '没有诱导续费的暗坑，没有默认勾选的增值项。权益只在支付经服务端验证后开通。')),
-    el('div', { class: 'plans' },
-      ...plans.map((p) => el('div', { class: 'plan reveal' + (p.feat ? ' featured' : '') },
-        p.feat ? el('div', { class: 'tag' }, '最受欢迎') : null,
-        el('h3', {}, p.name),
-        el('div', { class: 'desc' }, p.desc),
-        el('div', { class: 'price' }, p.price, p.per ? el('small', {}, p.per) : null),
-        el('ul', {}, ...p.feats.map((f) => el('li', {}, f))),
-        el('button', { class: 'btn ' + (p.feat ? 'btn-gold' : 'btn-ghost'), onclick: p.act }, p.cta))))));
+  return el('section', { class: 'section pricing', id: 'pricing' },
+    el('div', { class: 'wrap' },
+      el('h2', { class: 'section-title reveal' }, t('pricing_h')),
+      el('p', { class: 'section-sub reveal' }, t('pricing_sub')),
+      el('div', { class: 'plans' },
+        ...plans.map((pl) => el('div', { class: 'plan reveal' + (pl.pop ? ' pop' : '') },
+          pl.pop ? el('div', { class: 'plan-badge' }, t('plan_pop')) : null,
+          el('div', { class: 'plan-name' }, t(pl.n)),
+          el('div', { class: 'plan-price' }, t(pl.p)),
+          el('div', { class: 'plan-desc' }, t(pl.d)),
+          el('button', { class: 'btn ' + (pl.pop ? 'btn-gold' : 'btn-line'), style: 'width:100%;margin-top:14px', onclick: pl.action }, t(pl.cta)))))));
 }
 
-// ---- FAQ ----
 function faqSection() {
-  const qs = [
-    ['子午是算命 App 吗？', '不是。子午是一套「个人决策操作系统」，核心是帮你把重大决策结构化地想清楚。东方命理（八字 / 紫微）只作为可选的文化反思镜头，用于自我觉察，绝不作为现实因果的保证，也不会替你做职业、投资、医疗、法律或婚姻决定。'],
-    ['AI 会替我做决定吗？', '不会。AI 会把事实、需验证的假设、文化视角、风险与选项概率分层呈现，并给出仅供参考的建议，但最终决定权和责任始终在你自己手里。每次输出都会附带明确免责说明。'],
-    ['我的数据安全吗？', '你完全掌控自己的数据。长期记忆默认关闭，只有你主动开启后系统才会记住你的偏好；你随时可以查看、删除、一键导出全部数据，或彻底注销账户。'],
-    ['为什么定价这么克制？', '我们相信价值应由真实的决策帮助兑现，而不是靠诱导续费。免费额度足够你体验完整闭环，认可之后再升级；随时可取消，绝无暗坑。'],
-    ['命理引擎准确吗？', '排盘部分（八字、大运流年）按真太阳时精确计算，与专业排盘软件一致，并对每个模块标注置信度。紫微与喜用神等推断部分明确标注为「实验性 / 启发式」，我们不夸大、不承诺「100% 命中」。'],
-  ];
-  return el('section', { class: 'blk tint', id: 'faq' }, el('div', { class: 'wrap' },
-    el('div', { class: 'sec-head' },
-      el('span', { class: 'eyebrow', style: 'margin-bottom:14px' }, '常见问题'),
-      el('h2', {}, '你可能想问的')),
-    el('div', { class: 'faq' },
-      ...qs.map(([q, a]) => el('details', {}, el('summary', {}, q), el('p', {}, a))))));
+  const qs = [['faq_q1', 'faq_a1'], ['faq_q2', 'faq_a2'], ['faq_q3', 'faq_a3'], ['faq_q4', 'faq_a4'], ['faq_q5', 'faq_a5']];
+  return el('section', { class: 'section faq', id: 'faq' },
+    el('div', { class: 'wrap narrow' },
+      el('h2', { class: 'section-title reveal' }, t('faq_h')),
+      el('div', { class: 'faq-list' },
+        ...qs.map(([q, a]) => {
+          const item = el('details', { class: 'faq-item reveal' },
+            el('summary', {}, t(q)), el('div', { class: 'faq-a' }, t(a)));
+          return item;
+        }))));
 }
 
-// ---- CTA band ----
 function ctaSection() {
-  return el('section', { style: 'padding:20px 0 92px' }, el('div', { class: 'wrap' },
-    el('div', { class: 'ctaband on-dark reveal' },
-      el('h2', { html: '下一个重大决定，别再<em style="color:var(--gold-2);font-style:italic"> 拍脑袋</em>' }),
-      el('p', {}, '免费开始，用一个真实决策走完完整闭环——你会发现「想清楚」本身，就是最大的杠杆。'),
-      el('a', { class: 'btn btn-gold btn-lg', onclick: () => state.user ? go('decisions') : openAuth('register') }, '免费开始', el('span', { class: 'arw' }, '→')))));
+  return el('section', { class: 'section cta-band' },
+    el('div', { class: 'wrap narrow center' },
+      el('h2', { class: 'reveal' }, t('cta_h')),
+      el('p', { class: 'reveal' }, t('cta_sub')),
+      el('button', { class: 'btn btn-gold btn-lg reveal', onclick: () => { go('home'); setTimeout(() => document.getElementById('try')?.scrollIntoView({ behavior: 'smooth' }), 80); } }, t('cta_btn'))));
 }
 
 function footer() {
-  const col = (title, links) => el('div', {}, el('h5', {}, title),
-    ...links.map(([t, href, fn]) => el('a', fn ? { onclick: fn } : { href }, t)));
-  return el('footer', {}, el('div', { class: 'wrap' },
-    el('div', { class: 'foot-grid' },
-      el('div', { class: 'foot-about' },
-        el('a', { class: 'brand', href: '#home' }, el('span', { class: 'mark' }, '子'), el('span', {}, '子午', el('small', {}, 'MERIDIAN'))),
-        el('p', {}, '把重大选择想清楚再落地的个人决策操作系统。命是底牌，运是打法，选择权始终在你。')),
-      col('产品', [['产品能力', '#product'], ['如何运作', '#how'], ['定价', '#pricing'], ['常见问题', '#faq']]),
-      col('开始', [['免费注册', null, () => openAuth('register')], ['登录', null, () => openAuth('login')], ['决策台', null, () => state.user ? go('decisions') : openAuth('register')]]),
-      col('信任', [['隐私与数据', null, () => state.user ? go('account') : openAuth('register')], ['AI 透明度', '#faq'], ['决策免责', '#faq']])),
-    el('div', { class: 'foot-bottom' },
-      el('div', { class: 'disc' }, '© 2026 Meridian 子午. 本产品提供的内容仅供自我认知与决策参考，不构成医疗、法律、投资、婚姻或心理诊断建议。东方命理内容仅为文化反思，不作现实因果保证。'),
-      el('div', {}, '真太阳时精确排盘 · 数据主权归你'))));
+  return el('footer', { class: 'foot' },
+    el('div', { class: 'wrap' },
+      el('div', { class: 'foot-top' },
+        el('div', { class: 'brand' }, el('span', { class: 'mark' }, '合'), el('span', {}, '子午·合盘', el('small', {}, t('brand_sub')))),
+        el('div', { class: 'foot-tag' }, t('foot_tag'))),
+      el('p', { class: 'foot-disc' }, t('foot_disc')),
+      el('div', { class: 'foot-legal' }, '© ' + new Date().getFullYear() + ' Meridian Sync')));
 }
 
+route('home', () => {
+  app().append(navBar());
+  const hero = el('section', { class: 'hero' },
+    el('div', { class: 'wrap hero-grid' },
+      el('div', { class: 'hero-copy' },
+        el('div', { class: 'eyebrow reveal in' }, t('hero_eyebrow')),
+        el('h1', { class: 'reveal in' }, t('hero_title')),
+        el('p', { class: 'hero-sub reveal in' }, t('hero_sub')),
+        el('div', { class: 'hero-cta reveal in' },
+          el('button', { class: 'btn btn-gold btn-lg', onclick: () => document.getElementById('try')?.scrollIntoView({ behavior: 'smooth' }) }, t('hero_cta'))),
+        el('div', { class: 'hero-note reveal in' }, t('hero_note'))),
+      el('div', { class: 'hero-visual reveal in' }, mockCardHero())));
+
+  const problem = el('section', { class: 'section problem' },
+    el('div', { class: 'wrap narrow' },
+      el('h2', { class: 'section-title reveal' }, t('problem_h')),
+      el('div', { class: 'problem-grid' },
+        ...['p1', 'p2', 'p3', 'p4'].map((p) => el('div', { class: 'problem-q reveal' }, '“' + t(p) + '”')))));
+
+  const how = el('section', { class: 'section how', id: 'how' },
+    el('div', { class: 'wrap' },
+      el('h2', { class: 'section-title reveal' }, t('how_h')),
+      featureRow(0, 'feat1_t', 'feat1_d', mockCardHero()),
+      featureRow(1, 'feat2_t', 'feat2_d', mockTiming()),
+      featureRow(2, 'feat3_t', 'feat3_d', mockShare())));
+
+  const funnel = el('section', { class: 'section funnel' }, el('div', { class: 'wrap narrow' }, tryFunnel()));
+
+  app().append(hero, funnel, problem, how, storiesSection(), pricingSection(), faqSection(), ctaSection(), footer());
+  setTimeout(observeReveals, 30);
+});
+
+function mockTiming() {
+  const months = [['本月', 'high', '适合表白'], ['+1', 'steady', '平稳'], ['+2', 'caution', '需冷静'], ['+3', 'high', '关系升温'], ['+4', 'steady', '平稳'], ['+5', 'high', '谈重要事']];
+  return el('div', { class: 'mock-timing' },
+    el('div', { class: 'mt-title' }, state.lang === 'zh' ? '未来 6 个月运势' : 'Next 6 months'),
+    el('div', { class: 'timing-grid' },
+      ...months.map(([m, lv, note]) => el('div', { class: 'timing-cell ' + lv },
+        el('div', { class: 'tc-m' }, m), el('div', { class: 'tc-dot' }), el('div', { class: 'tc-n' }, state.lang === 'zh' ? note : note)))));
+}
+function mockShare() {
+  return el('div', { class: 'mock-share' },
+    syncCard({ overall: 76, keyword: state.lang === 'zh' ? '细水长流的缘分' : 'A slow-burning bond',
+      dims: null, hook: null, meta: { nameA: state.lang === 'zh' ? '你' : 'You', nameB: 'TA' } }, { variant: 'mini' }),
+    el('div', { class: 'ms-actions' },
+      el('span', { class: 'ms-chip' }, '💬 ' + (state.lang === 'zh' ? '发给 TA' : 'Send to them')),
+      el('span', { class: 'ms-chip' }, '👭 ' + (state.lang === 'zh' ? '发闺蜜群' : 'Group chat'))));
+}
+
+// ============================================================
+//  billing / auth
+// ============================================================
 async function upgrade(plan) {
   if (!state.user) { openAuth('register'); return; }
   try {
-    // Creates a PENDING order via a payment provider. Entitlement is granted only
-    // after a verified payment webhook (no client-side upgrade). See SECURITY.md.
     await API.call('/billing/checkout', { method: 'POST', body: { plan, provider: 'mock' } });
-    toast('已创建订单（待支付）。真实支付渠道需接入商户凭证；权益仅在支付回调验证后开通。');
-  } catch (e) { toast(e.message || '暂不可用'); }
+    toast(state.lang === 'zh'
+      ? '已创建订单（待支付）。真实支付需接入商户凭证；权益仅在支付回调验证后开通。'
+      : 'Order created (pending). Real payment requires a merchant integration; access is granted only after a verified webhook.');
+  } catch (e) { toast(e.message || (state.lang === 'zh' ? '暂不可用' : 'Unavailable')); }
 }
 
-// ---- auth modal ----
 function openAuth(mode) {
   const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
   const errBox = el('div', { class: 'err', style: 'display:none' });
   const emailI = el('input', { type: 'email', placeholder: 'you@example.com', autocomplete: 'email' });
-  const passI = el('input', { type: 'password', placeholder: '至少 6 位', autocomplete: 'current-password' });
-  const nameI = el('input', { type: 'text', placeholder: '如何称呼你' });
-
+  const passI = el('input', { type: 'password', placeholder: state.lang === 'zh' ? '至少 6 位' : 'at least 6 chars', autocomplete: 'current-password' });
+  const nameI = el('input', { type: 'text', placeholder: state.lang === 'zh' ? '如何称呼你' : 'Your name' });
   const submit = async () => {
     errBox.style.display = 'none';
     try {
@@ -335,780 +531,264 @@ function openAuth(mode) {
         const r = await API.call('/auth/login', { method: 'POST', body: { email: emailI.value.trim(), password: passI.value } });
         API.setToken(r.token); state.user = r.user;
       }
-      overlay.remove(); go('app');
+      overlay.remove();
+      if (state.lastForm) saveAndOpen(); else go('mine');
     } catch (e) { errBox.textContent = e.message; errBox.style.display = 'block'; }
   };
-
   const modal = el('div', { class: 'modal', style: 'position:relative' },
     el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
-    el('h3', {}, mode === 'register' ? '开始你的命盘之旅' : '欢迎回来'),
-    el('div', { class: 'muted' }, mode === 'register' ? '注册后立即免费排盘并开始对话' : '登录继续你的对话'),
+    el('h3', {}, mode === 'register' ? (state.lang === 'zh' ? '注册 · 送 3 次完整报告' : 'Sign up · 3 free reports') : (state.lang === 'zh' ? '欢迎回来' : 'Welcome back')),
+    el('div', { class: 'muted' }, mode === 'register' ? (state.lang === 'zh' ? '注册后立即解锁你的合盘报告' : 'Unlock your reading right after sign-up') : (state.lang === 'zh' ? '登录继续' : 'Log in to continue')),
     errBox,
-    mode === 'register' ? el('div', { class: 'field' }, el('label', {}, '昵称'), nameI) : null,
-    el('div', { class: 'field' }, el('label', {}, '邮箱'), emailI),
-    el('div', { class: 'field' }, el('label', {}, '密码'), passI),
+    mode === 'register' ? el('div', { class: 'field' }, el('label', {}, state.lang === 'zh' ? '昵称' : 'Name'), nameI) : null,
+    el('div', { class: 'field' }, el('label', {}, state.lang === 'zh' ? '邮箱' : 'Email'), emailI),
+    el('div', { class: 'field' }, el('label', {}, state.lang === 'zh' ? '密码' : 'Password'), passI),
     el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit },
-      mode === 'register' ? '创建账户' : '登录'),
-    el('div', { class: 'switch' }, mode === 'register' ? '已有账户？' : '还没有账户？',
+      mode === 'register' ? (state.lang === 'zh' ? '创建账户' : 'Create account') : (state.lang === 'zh' ? '登录' : 'Log in')),
+    el('div', { class: 'switch' }, mode === 'register' ? (state.lang === 'zh' ? '已有账户？' : 'Have an account?') : (state.lang === 'zh' ? '还没有账户？' : 'No account?'),
       el('a', { onclick: () => { overlay.remove(); openAuth(mode === 'register' ? 'login' : 'register'); } },
-        mode === 'register' ? ' 去登录' : ' 免费注册')));
+        mode === 'register' ? (state.lang === 'zh' ? ' 去登录' : ' Log in') : (state.lang === 'zh' ? ' 免费注册' : ' Sign up free'))));
   passI.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   overlay.append(modal); document.body.append(overlay);
   setTimeout(() => (mode === 'register' ? nameI : emailI).focus(), 50);
 }
 
+// ============================================================
+//  MINE (authenticated dashboard)
+// ============================================================
+route('mine', async () => {
+  app().append(navBar());
+  const wrap = el('div', { class: 'wrap app-wrap' });
+  app().append(wrap);
+  wrap.append(el('div', { class: 'mine-head' },
+    el('h2', {}, t('mine_h')),
+    el('button', { class: 'btn btn-gold', onclick: () => go('new') }, t('mine_new'))));
+  const list = el('div', { class: 'mine-list' }, el('div', { class: 'loading' }, '…'));
+  wrap.append(list);
+  try {
+    const { relationships } = await API.call('/sync/relationships');
+    list.innerHTML = '';
+    if (!relationships || !relationships.length) {
+      list.append(el('div', { class: 'empty-state' },
+        el('div', { class: 'es-ic' }, '❤'),
+        el('h3', {}, t('mine_empty_t')), el('p', {}, t('mine_empty_d')),
+        el('button', { class: 'btn btn-gold', onclick: () => go('new') }, t('mine_empty_btn'))));
+    } else {
+      relationships.forEach((r) => list.append(relCard(r)));
+    }
+  } catch (e) { list.innerHTML = ''; list.append(el('div', { class: 'err' }, e.message)); }
+});
+
+function relCard(r) {
+  const labels = REL_LABELS();
+  const tone = scoreTone(r.overall || 0);
+  return el('a', { class: 'rel-card', onclick: () => go('report/' + r.report_id) },
+    el('div', { class: 'rc-score ' + tone }, String(r.overall != null ? r.overall : '—')),
+    el('div', { class: 'rc-body' },
+      el('div', { class: 'rc-names' }, (r.name_a || t('label_you')) + ' & ' + (r.name_b || t('label_ta'))),
+      el('div', { class: 'rc-key' }, r.keyword || ''),
+      el('div', { class: 'rc-meta' },
+        el('span', { class: 'rc-tag' }, labels[r.rel_type] || r.rel_type),
+        el('span', { class: 'rc-status ' + (r.locked ? 'locked' : 'open') }, r.locked ? (state.lang === 'zh' ? '未解锁' : 'Locked') : (state.lang === 'zh' ? '已解锁' : 'Unlocked')))),
+    el('div', { class: 'rc-arrow' }, '›'));
+}
+
+// ============================================================
+//  NEW reading
+// ============================================================
+route('new', () => {
+  app().append(navBar());
+  const wrap = el('div', { class: 'wrap narrow app-wrap' });
+  app().append(wrap);
+  wrap.append(el('h2', { class: 'page-title' }, t('new_h')), tryFunnel());
+  setTimeout(observeReveals, 30);
+});
+
+// ============================================================
+//  REPORT (locked -> unlock -> full)
+// ============================================================
+route('report', async () => {
+  app().append(navBar());
+  const wrap = el('div', { class: 'wrap narrow app-wrap' });
+  app().append(wrap);
+  const id = (location.hash.split('/')[1] || '').split('?')[0];
+  wrap.append(el('div', { class: 'loading' }, state.lang === 'zh' ? '载入报告中…' : 'Loading…'));
+  try {
+    const data = await API.call('/sync/reports/' + id);
+    wrap.innerHTML = '';
+    if (data.locked || (data.report && data.report.locked)) {
+      wrap.append(lockedReportView(id, data));
+    } else {
+      wrap.append(fullReportView(id, data));
+    }
+  } catch (e) { wrap.innerHTML = ''; wrap.append(el('div', { class: 'err' }, e.message)); }
+  window.scrollTo(0, 0);
+});
+
+function lockedReportView(id, data) {
+  const p = data.preview || data;
+  const card = syncCard({
+    overall: p.overall, keyword: p.keyword, dims: p.dims, hook: p.hook,
+    meta: { nameA: p.name_a, nameB: p.name_b },
+  }, { variant: 'report' });
+  const credits = (state.user && state.user.credits) || 0;
+  const isMember = !!(state.user && state.user.plan === 'member');
+  const box = el('div', { class: 'unlock-box' },
+    el('h3', {}, '🔒 ' + t('unlock_h')),
+    el('p', { class: 'lt-hint' }, t('preview_unlock_hint')),
+    isMember ? el('div', { class: 'unlock-member' }, t('unlock_member')) : el('div', { class: 'unlock-credits' }, t('unlock_credits', { n: credits })),
+    el('div', { class: 'unlock-actions' },
+      (isMember || credits > 0)
+        ? el('button', { class: 'btn btn-gold btn-lg', onclick: () => doUnlock(id) }, isMember ? t('unlock_member') : t('unlock_btn_free'))
+        : el('button', { class: 'btn btn-gold btn-lg', onclick: () => go('pricing') }, t('unlock_btn_pay'))));
+  return el('div', { class: 'report' }, card, box);
+}
+
+async function doUnlock(id) {
+  try {
+    await API.call('/sync/reports/' + id + '/unlock', { method: 'POST' });
+    try { const { user } = await API.call('/me'); state.user = user; } catch {}
+    render();
+  } catch (e) {
+    if (e.status === 402) { toast(state.lang === 'zh' ? '免费额度已用完，去获取报告或成为会员' : 'Out of free unlocks — get a report or membership'); go('pricing'); }
+    else toast(e.message);
+  }
+}
+
+function reportBlock(title, body) {
+  return el('div', { class: 'report-block' }, el('div', { class: 'rb-title' }, title), body);
+}
+function insightList(items) {
+  return el('div', { class: 'insight-list' },
+    ...(items || []).map((it) => el('div', { class: 'insight' },
+      el('div', { class: 'insight-txt' }, typeof it === 'string' ? it : it.text),
+      (it && it.source) ? el('div', { class: 'src' }, it.source) : null)));
+}
+
+function fullReportView(id, data) {
+  const rep = data.report || data;
+  const meta = rep.meta || {};
+  const card = syncCard({
+    overall: rep.overall, keyword: rep.keyword, dims: rep.dims, hook: rep.hook,
+    meta: { nameA: meta.nameA || rep.name_a, nameB: meta.nameB || rep.name_b },
+  }, { variant: 'report' });
+  const blocks = [];
+  if (rep.headline) blocks.push(el('div', { class: 'report-headline' }, rep.headline));
+  if (rep.strengths && rep.strengths.length) blocks.push(reportBlock('💛 ' + t('rep_strengths'), insightList(rep.strengths)));
+  if (rep.frictions && rep.frictions.length) blocks.push(reportBlock('⚠️ ' + t('rep_frictions'), insightList(rep.frictions)));
+  if (rep.dynamic) blocks.push(reportBlock('🔄 ' + t('rep_dynamic'), el('p', { class: 'rep-p' }, rep.dynamic)));
+  if (rep.advice && rep.advice.length) {
+    blocks.push(reportBlock('🧭 ' + t('rep_advice'),
+      el('div', { class: 'adv-list' }, ...rep.advice.map((a, i) => el('div', { class: 'adv-item' },
+        el('span', { class: 'adv-ic' }, String(i + 1)), el('span', {}, typeof a === 'string' ? a : a.text))))));
+  }
+  if (rep.timing && rep.timing.length) {
+    blocks.push(reportBlock('📅 ' + t('rep_timing'),
+      el('div', { class: 'timing-grid' }, ...rep.timing.map((tm) => el('div', { class: 'timing-cell ' + (tm.level === '高能' ? 'high' : tm.level === '需谨慎' ? 'caution' : 'steady') },
+        el('div', { class: 'tc-m' }, tm.month), el('div', { class: 'tc-dot' }), el('div', { class: 'tc-n' }, tm.note || tm.level))))));
+  }
+  const actions = el('div', { class: 'report-actions' },
+    el('button', { class: 'btn btn-gold', onclick: () => shareReport(id, rep) }, '🔗 ' + t('rep_share')),
+    el('button', { class: 'btn btn-line', onclick: () => go('mine') }, state.lang === 'zh' ? '返回我的合盘' : 'Back to my readings'));
+  return el('div', { class: 'report' }, card, ...blocks,
+    rep.disclaimer ? el('p', { class: 'report-disc' }, rep.disclaimer) : null,
+    actions, feedbackBox(id, data.relationship_id || rep.relationship_id));
+}
+
+async function shareReport(id, rep) {
+  try {
+    const { slug, url } = await API.call('/sync/share', { method: 'POST', body: { report_id: id } });
+    const link = url || (location.origin + '/c/' + slug);
+    try { await navigator.clipboard.writeText(link); toast(state.lang === 'zh' ? '缘分卡片链接已复制，去发给 TA 吧' : 'Card link copied — go share it'); }
+    catch { toast(link); }
+    window.open('/c/' + slug, '_blank');
+  } catch (e) { toast(e.message); }
+}
+
+function feedbackBox(reportId, relId) {
+  const box = el('div', { class: 'feedback-box' }, el('div', { class: 'fb-q' }, t('rep_feedback_q')));
+  const btns = el('div', { class: 'fb-btns' });
+  [['accurate', 'fb_hit', '😊'], ['partly', 'fb_part', '🙂'], ['inaccurate', 'fb_miss', '😐']].forEach(([acc, k, emo]) => {
+    btns.append(el('button', { class: 'fb-btn', onclick: () => sendFeedback(reportId, relId, acc, box) }, emo + ' ' + t(k)));
+  });
+  box.append(btns);
+  return box;
+}
+async function sendFeedback(reportId, relId, accuracy, box) {
+  try {
+    await API.call('/sync/feedback', { method: 'POST', body: { report_id: reportId, relationship_id: relId, accuracy } });
+    box.innerHTML = ''; box.append(el('div', { class: 'fb-thanks' }, '🙏 ' + t('fb_thanks')));
+  } catch (e) { toast(e.message); }
+}
+
+// ============================================================
+//  PUBLIC SHARE CARD  /c/:slug
+// ============================================================
+route('c', async () => {
+  const slug = (location.hash.split('/')[1] || '').split('?')[0];
+  app().append(navBar());
+  const wrap = el('div', { class: 'wrap narrow app-wrap center' });
+  app().append(wrap);
+  wrap.append(el('div', { class: 'loading' }, '…'));
+  try {
+    const { card } = await API.call('/sync/card/' + slug);
+    wrap.innerHTML = '';
+    wrap.append(
+      el('div', { class: 'card-page' },
+        syncCard({ overall: card.overall, keyword: card.keyword, dims: card.dims, hook: null,
+          meta: { nameA: t('label_you'), nameB: t('label_ta') } }, { variant: 'share' }),
+        el('div', { class: 'card-cta' },
+          el('h3', {}, state.lang === 'zh' ? '也想看看你俩的缘分？' : 'Curious about your own?'),
+          el('p', {}, state.lang === 'zh' ? '30 秒免费测一次，注册即送 3 次完整报告。' : '30-second free reading, 3 full reports on sign-up.'),
+          el('button', { class: 'btn btn-gold btn-lg', onclick: () => go('home') }, state.lang === 'zh' ? '免费测我的缘分 →' : 'Get my free reading →'))));
+  } catch (e) { wrap.innerHTML = ''; wrap.append(el('div', { class: 'err' }, state.lang === 'zh' ? '卡片不存在或已失效' : 'Card not found')); }
+  window.scrollTo(0, 0);
+});
+
+// ============================================================
+//  ACCOUNT (privacy console)
+// ============================================================
+route('account', async () => {
+  app().append(navBar());
+  const wrap = el('div', { class: 'wrap narrow app-wrap' });
+  app().append(wrap);
+  wrap.append(el('h2', { class: 'page-title' }, t('acct_h')));
+  const exportBtn = el('button', { class: 'btn btn-line', onclick: async () => {
+    try {
+      const data = await API.call('/me/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = el('a', { href: URL.createObjectURL(blob), download: 'meridian-my-data.json' }); a.click();
+    } catch (e) { toast(e.message); }
+  } }, state.lang === 'zh' ? '导出我的全部数据 (JSON)' : 'Export all my data (JSON)');
+  const delBtn = el('button', { class: 'btn btn-danger', onclick: async () => {
+    if (!confirm(state.lang === 'zh' ? '确定永久注销账户？你的合盘、报告、卡片将被彻底删除，不可恢复。' : 'Permanently delete your account? All readings will be erased.')) return;
+    if (!confirm(state.lang === 'zh' ? '再次确认：此操作不可撤销。' : 'Confirm again: this cannot be undone.')) return;
+    try { await API.call('/me', { method: 'DELETE' }); API.setToken(null); state.user = null; toast(state.lang === 'zh' ? '账户已注销' : 'Account deleted'); go('home'); }
+    catch (e) { toast(e.message); }
+  } }, state.lang === 'zh' ? '永久注销账户' : 'Delete account');
+  wrap.append(
+    el('div', { class: 'acct-row' },
+      el('h3', {}, state.lang === 'zh' ? '数据可携与注销' : 'Data portability & deletion'),
+      el('p', { class: 'muted' }, state.lang === 'zh' ? '你拥有完整的数据主权。出生信息仅用于合盘，分享卡片不含隐私。' : 'You own your data fully. Birth info is used only for calculation; share cards contain no privacy.'),
+      el('div', { class: 'acct-actions' }, exportBtn, delBtn)));
+});
+
 // ---- render ----
 function render() {
-  ensureBackdrop();
   app().innerHTML = '';
-  const name = (location.hash || '#home').slice(1).split('?')[0].split('/')[0] || 'home';
-  if (['app', 'decisions', 'account'].includes(name) && !state.user) { go('home'); return; }
-  const fn = routes[name] || routes['home'];
-  // anchor sections live on home; render home then smooth-scroll
-  if (['product', 'how', 'pricing', 'faq'].includes(name)) {
+  const raw = (location.hash || '#home').slice(1);
+  const name = raw.split('?')[0].split('/')[0] || 'home';
+  const authGated = ['mine', 'new', 'report', 'account'];
+  if (authGated.includes(name) && !state.user) { openAuth('login'); go('home'); return; }
+  if (['how', 'stories', 'pricing', 'faq'].includes(name)) {
     routes['home']();
     setTimeout(() => document.getElementById(name)?.scrollIntoView({ behavior: 'smooth' }), 60);
     return;
   }
+  const fn = routes[name] || routes['home'];
   fn();
-  window.scrollTo(0, 0);
+  if (name !== 'report' && name !== 'c') window.scrollTo(0, 0);
 }
-
-// ---- APP (authenticated) ----
-route('app', async () => {
-  app().append(navBar());
-  const container = el('div', { class: 'appview' });
-  app().append(container);
-  container.append(el('div', { class: 'side' }), el('div', { class: 'chat' },
-    el('div', { class: 'msgs', style: 'align-items:center;justify-content:center' },
-      el('div', { class: 'typing' }, '排盘与载入中', el('span', {}, '.'), el('span', {}, '.'), el('span', {}, '.')))));
-  try {
-    const [{ charts }, { conversations }] = await Promise.all([API.call('/charts'), API.call('/conversations')]);
-    state.conversations = conversations || [];
-    if (charts && charts.length) {
-      const { chart } = await API.call('/chart/' + charts[0].id);
-      state.chart = chart; state.chartId = charts[0].id;
-      renderApp(container);
-    } else {
-      renderChartForm(container);
-    }
-  } catch (e) { toast(e.message); renderChartForm(container); }
-});
-
-function renderChartForm(container) {
-  container.innerHTML = '';
-  container.style.display = 'block';
-  const wrap = el('div', { style: 'max-width:520px;margin:6vh auto;padding:0 20px' });
-  const err = el('div', { class: 'err', style: 'display:none' });
-  const gender = el('select', {}, el('option', { value: 'male' }, '男'), el('option', { value: 'female' }, '女'));
-  const date = el('input', { type: 'date' });
-  const time = el('input', { type: 'time', value: '12:00' });
-  const place = el('input', { type: 'text', placeholder: '如：江苏徐州' });
-  const lon = el('input', { type: 'number', step: '0.01', placeholder: '经度（可选，如 117.95）' });
-
-  const submit = async () => {
-    err.style.display = 'none';
-    if (!date.value) { err.textContent = '请填写出生日期'; err.style.display = 'block'; return; }
-    const btn = wrap.querySelector('.btn-gold');
-    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 排盘中…';
-    try {
-      const body = { gender: gender.value, date: date.value, time: time.value || '12:00', place: place.value, longitude: lon.value ? Number(lon.value) : undefined, label: 'self' };
-      const { id, chart } = await API.call('/chart', { method: 'POST', body });
-      state.chart = chart; state.chartId = id;
-      toast('排盘完成');
-      renderApp(document.querySelector('.appview') || container);
-    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '排盘并开始对话 →'; }
-  };
-
-  wrap.append(
-    el('div', { class: 'sec-head', style: 'margin-bottom:26px' },
-      el('div', { class: 'k' }, 'STEP 1'),
-      el('h2', { style: 'font-size:28px' }, '先排出你的命盘'),
-      el('p', {}, '按真太阳时精确排盘。出生时间越准，解读越贴合你。')),
-    el('div', { class: 'modal', style: 'position:static;max-width:none' },
-      err,
-      el('div', { class: 'row2' },
-        el('div', { class: 'field' }, el('label', {}, '性别'), gender),
-        el('div', { class: 'field' }, el('label', {}, '出生日期（阳历）'), date)),
-      el('div', { class: 'row2' },
-        el('div', { class: 'field' }, el('label', {}, '出生时间'), time),
-        el('div', { class: 'field' }, el('label', {}, '出生经度（可选）'), lon)),
-      el('div', { class: 'field' }, el('label', {}, '出生地'), place),
-      el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:8px', onclick: submit }, '排盘并开始对话 →')));
-  container.append(wrap);
-}
-
-function chartPanel() {
-  const c = state.chart; if (!c) return el('div');
-  const p = c.bazi.pillars;
-  return el('div', {},
-    el('div', { class: 'chartcard' },
-      el('div', { class: 'pillars' },
-        ...[['年', p.year], ['月', p.month], ['日', p.day], ['时', p.hour]].map(([l, gz]) =>
-          el('div', { class: 'pill' }, el('div', { class: 'lab' }, l), el('div', { class: 'gz' }, gz)))),
-      el('div', { class: 'r' }, el('span', {}, '日主'), el('b', {}, `${c.bazi.dayMaster}${c.bazi.dayMasterElement} · ${c.strength.level}`)),
-      el('div', { class: 'r' }, el('span', {}, '喜用五行'), el('b', {}, c.strength.favorable.join('、'))),
-      el('div', { class: 'r' }, el('span', {}, '命宫/身宫'), el('b', {}, `${c.ziwei.ming.ganZhi} / ${c.ziwei.shen.branch}`)),
-      el('div', { class: 'r' }, el('span', {}, '五行局'), el('b', {}, c.ziwei.ju.name)),
-      el('div', { class: 'r' }, el('span', {}, '命主/身主'), el('b', {}, `${c.ziwei.mingZhu}/${c.ziwei.shenZhu}`)),
-      el('div', { class: 'r' }, el('span', {}, '当前大运'), el('b', {}, c.currentLuck ? `${c.currentLuck.ganZhi}（${c.currentLuck.tenGod}）` : '未起运')),
-      el('div', { class: 'r' }, el('span', {}, '今年流年'), el('b', {}, c.annual.ganZhi))));
-}
-
-function renderApp(container) {
-  container.style.display = '';
-  container.innerHTML = '';
-  const side = el('div', { class: 'side' });
-  side.append(
-    el('button', { class: 'btn btn-gold new', onclick: () => startConversation() }, '＋ 新对话'),
-    el('button', { class: 'btn btn-ghost new', style: 'margin-bottom:16px', onclick: () => go('decisions') }, '🧭 决策台'),
-    chartPanel(),
-    el('h4', {}, '历史对话'),
-    ...(state.conversations.length ? state.conversations.map((cv) =>
-      el('div', { class: 'conv-item' + (cv.id === state.convId ? ' active' : ''), 'data-id': cv.id, onclick: () => openConversation(cv.id) }, cv.title || '未命名'))
-      : [el('div', { style: 'font-size:12.5px;color:var(--muted)' }, '还没有对话，点上方开始')]));
-  const chat = el('div', { class: 'chat', id: 'chatarea' });
-  container.append(side, chat);
-  if (state.convId) { openConversation(state.convId); }
-  else { chat.append(emptyChatInner()); }
-}
-
-function emptyChatInner() {
-  const c = state.chart;
-  return el('div', { class: 'msgs', style: 'align-items:center;justify-content:center;text-align:center' },
-    el('div', { style: 'max-width:480px' },
-      el('div', { style: 'font-family:var(--serif);font-size:26px;color:var(--gold-2);margin-bottom:12px' }, `${state.user.name}，你的军师已就位`),
-      el('p', { style: 'color:#b9b4a5;margin-bottom:24px' }, `已按真太阳时排出你的命盘（${c ? `${c.bazi.pillars.year} ${c.bazi.pillars.month} ${c.bazi.pillars.day} ${c.bazi.pillars.hour}` : ''}）。选一个话题开始，或直接提问。`),
-      el('div', { class: 'suggest', style: 'justify-content:center' },
-        ...['我今年的事业机会在哪？', '我适合创业还是打工？', '未来哪几年是我的上升期？', '我的天赋结构适合什么方向？']
-          .map((q) => el('div', { class: 'chip', onclick: () => startConversation('general', q) }, q)))));
-}
-
-async function startConversation(topic = 'general', firstMsg) {
-  try {
-    const { id } = await API.call('/conversations', { method: 'POST', body: { chart_id: state.chartId, topic } });
-    const { conversations } = await API.call('/conversations');
-    state.conversations = conversations || [];
-    state.convId = id; state.messages = [];
-    renderApp(document.querySelector('.appview'));
-    if (firstMsg) setTimeout(() => sendMessage(firstMsg), 100);
-  } catch (e) { toast(e.message); }
-}
-
-async function openConversation(id) {
-  state.convId = id;
-  document.querySelectorAll('.conv-item').forEach((n) => n.classList.toggle('active', n.getAttribute('data-id') === id));
-  try {
-    const { messages } = await API.call(`/conversations/${id}/messages`);
-    state.messages = messages || [];
-  } catch { state.messages = []; }
-  renderChat();
-}
-
-function msgBubble(m) {
-  if (m.role === 'assistant') {
-    return el('div', { class: 'msg assistant' }, el('div', { class: 'who' }, '子午 · 军师'), document.createTextNode(m.content));
-  }
-  return el('div', { class: 'msg user' }, m.content);
-}
-
-function renderChat() {
-  const chat = document.getElementById('chatarea');
-  if (!chat) return;
-  chat.innerHTML = '';
-  const msgs = el('div', { class: 'msgs', id: 'msgs' });
-  if (!state.messages.length) {
-    msgs.append(el('div', { class: 'typing', style: 'align-self:center' }, '就当下的具体问题开聊吧～'));
-  } else {
-    state.messages.forEach((m) => msgs.append(msgBubble(m)));
-  }
-  // composer
-  const ta = el('textarea', { rows: '1', placeholder: '问问你的军师…（Enter 发送，Shift+Enter 换行）' });
-  const sendBtn = el('button', { class: 'send', type: 'submit' }, '发送');
-  const form = el('form', { onsubmit: (e) => { e.preventDefault(); const v = ta.value.trim(); if (v) { ta.value = ''; ta.style.height = 'auto'; sendMessage(v); } } }, ta, sendBtn);
-  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
-  ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
-  const suggest = el('div', { class: 'suggest' },
-    ...['事业', '财富', '感情', '今年运势', '关键决策时机'].map((t) =>
-      el('div', { class: 'chip', onclick: () => sendMessage(`请就我的「${t}」，结合我的命盘给我具体分析和建议。`) }, t)));
-  const composer = el('div', { class: 'composer' }, state.messages.length ? null : suggest, form);
-  const head = el('div', { class: 'chat-head' },
-    el('div', { class: 't' }, state.conversations.find((c) => c.id === state.convId)?.title || '新的咨询'),
-    el('div', { class: 'credits' }, state.user.plan === 'free' ? `剩余 ${state.user.credits} 次免费分析` : `Core · 每月公平使用额度`));
-  chat.append(head, msgs, composer);
-  msgs.scrollTop = msgs.scrollHeight;
-  setTimeout(() => ta.focus(), 50);
-}
-
-async function sendMessage(content) {
-  if (state.sending) return;
-  state.sending = true;
-  const msgs = document.getElementById('msgs');
-  // clear placeholder
-  if (msgs && msgs.querySelector('.typing') && !state.messages.length) msgs.innerHTML = '';
-  state.messages.push({ role: 'user', content });
-  if (msgs) { msgs.append(msgBubble({ role: 'user', content })); msgs.scrollTop = msgs.scrollHeight; }
-  const typing = el('div', { class: 'typing' }, '军师思考中', el('span', {}, '.'), el('span', {}, '.'), el('span', {}, '.'));
-  if (msgs) { msgs.append(typing); msgs.scrollTop = msgs.scrollHeight; }
-  try {
-    const { reply, credits } = await API.call(`/conversations/${state.convId}/chat`, { method: 'POST', body: { content } });
-    if (typeof credits === 'number') state.user.credits = credits;
-    typing.remove();
-    state.messages.push({ role: 'assistant', content: reply });
-    if (msgs) { msgs.append(msgBubble({ role: 'assistant', content: reply })); msgs.scrollTop = msgs.scrollHeight; }
-    // update credit label + conv title
-    const cr = document.querySelector('.chat-head .credits');
-    if (cr && state.user.plan === 'free') cr.textContent = `剩余 ${state.user.credits} 次免费对话`;
-    if (state.messages.length === 2) { // refresh sidebar titles
-      const { conversations } = await API.call('/conversations');
-      state.conversations = conversations || [];
-      const item = document.querySelector(`.conv-item[data-id="${state.convId}"]`);
-      const t = state.conversations.find((c) => c.id === state.convId);
-      if (item && t) item.textContent = t.title;
-      const ht = document.querySelector('.chat-head .t');
-      if (ht && t) ht.textContent = t.title;
-    }
-  } catch (e) {
-    typing.remove();
-    if (e.status === 402) {
-      const up = el('div', { class: 'msg assistant' }, el('div', { class: 'who' }, '子午'),
-        document.createTextNode('你的免费额度已用完。订阅 Core（¥59/月）获得每月公平使用额度，并解锁多个活跃决策与报告导出。'));
-      if (msgs) msgs.append(up);
-      setTimeout(() => go('pricing'), 400);
-    } else {
-      toast(e.message || '发送失败');
-    }
-  } finally { state.sending = false; }
-}
-
-// ============================================================
-//  DECISION-OS  — the P1 decision closed-loop frontend
-//  create → goals/constraints → options → evidence/risk matrix
-//  → AI structured analysis → action plan → review
-//  Backend contract: /api/decisions* (see src/index.js)
-// ============================================================
-
-const decState = { list: [], current: null, options: [], evidence: [], actions: [], reviews: [], analysis: null, busy: false };
-
-function decHash() {
-  // supports #decisions  and  #decisions/<id>
-  const raw = (location.hash || '').slice(1);
-  const parts = raw.split('/');
-  return parts.length > 1 ? decodeURIComponent(parts.slice(1).join('/')) : null;
-}
-
-// ---- LIST + CREATE ----
-route('decisions', async () => {
-  app().append(navBar());
-  const id = decHash();
-  const container = el('div', { class: 'decwrap' });
-  app().append(container);
-  if (id) { await renderDecisionDetail(container, id); return; }
-  await renderDecisionList(container);
-});
-
-async function renderDecisionList(container) {
-  container.innerHTML = '';
-  container.append(el('div', { class: 'typing', style: 'margin:40px auto' }, '载入决策台…'));
-  let decisions = [];
-  try { const r = await API.call('/decisions'); decisions = r.decisions || []; }
-  catch (e) { toast(e.message); }
-  decState.list = decisions;
-  container.innerHTML = '';
-
-  const head = el('div', { class: 'dec-head' },
-    el('div', {},
-      el('div', { class: 'k' }, 'DECISION OS'),
-      el('h2', {}, '你的重大决策工作台'),
-      el('p', { class: 'dec-sub' }, '把一个让你反复纠结的重大选择，拆成事实、假设、选项与风险，想清楚再落地。命理只是可选的文化反思镜头，不替你做决定。')),
-    el('button', { class: 'btn btn-gold', onclick: openNewDecision }, '＋ 新建决策'));
-
-  const grid = el('div', { class: 'dec-grid' });
-  if (!decisions.length) {
-    grid.append(el('div', { class: 'dec-empty' },
-      el('div', { style: 'font-size:40px;margin-bottom:10px' }, '🧭'),
-      el('h3', {}, '还没有决策'),
-      el('p', {}, '例如：「要不要从大厂裸辞去做独立开发？」「offer A 稳定 vs offer B 高成长，怎么选？」「今年要不要从一线城市搬回老家？」'),
-      el('button', { class: 'btn btn-gold', style: 'margin-top:14px', onclick: openNewDecision }, '创建第一个决策 →')));
-  } else {
-    decisions.forEach((d) => grid.append(decisionCard(d)));
-  }
-  container.append(head, grid);
-}
-
-const STATUS_LABEL = { open: '待梳理', analyzing: '分析中', deciding: '待决定', executing: '执行中', reviewing: '复盘中', closed: '已完成' };
-function decisionCard(d) {
-  return el('div', { class: 'dec-card', onclick: () => go('decisions/' + d.id) },
-    el('div', { class: 'dec-card-top' },
-      el('span', { class: 'dec-status s-' + (d.status || 'open') }, STATUS_LABEL[d.status] || d.status),
-      d.deadline_at ? el('span', { class: 'dec-deadline' }, '截止 ' + fmtDate(d.deadline_at)) : null),
-    el('h3', {}, d.title),
-    el('div', { class: 'dec-card-foot' }, '更新于 ' + fmtDate(d.updated_at)));
-}
-
-function fmtDate(v) {
-  if (!v) return '';
-  const n = typeof v === 'number' ? v : Number(v);
-  const d = new Date(isNaN(n) ? v : n);
-  if (isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function openNewDecision() {
-  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
-  const err = el('div', { class: 'err', style: 'display:none' });
-  const titleI = el('input', { type: 'text', placeholder: '例如：要不要接受 B 公司的 offer？' });
-  const stmtI = el('textarea', { rows: '3', placeholder: '用一两句话把你真正纠结的问题说清楚（可留空，之后再补）' });
-  const deadI = el('input', { type: 'date' });
-  const goalsI = el('input', { type: 'text', placeholder: '你想达成的目标，逗号分隔（如：收入增长, 学到东西, 生活平衡）' });
-  const consI = el('input', { type: 'text', placeholder: '硬约束，逗号分隔（如：不能离开现城市, 家庭开支不能断）' });
-  const lossI = el('input', { type: 'text', placeholder: '你能承受的最大损失（如：3 个月生活费 + 一段时间焦虑）' });
-  const revSel = el('select', {},
-    el('option', { value: '' }, '这个决定可逆吗？'),
-    el('option', { value: 'reversible' }, '基本可逆（走错还能回头）'),
-    el('option', { value: 'partially' }, '部分可逆（代价不小）'),
-    el('option', { value: 'irreversible' }, '几乎不可逆（一步定局）'));
-
-  const submit = async () => {
-    err.style.display = 'none';
-    if (!titleI.value.trim()) { err.textContent = '请先写下你要做的决策'; err.style.display = 'block'; return; }
-    const btn = overlay.querySelector('.btn-gold');
-    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 创建中…';
-    try {
-      const body = {
-        title: titleI.value.trim(),
-        statement: stmtI.value.trim(),
-        deadline_at: deadI.value ? new Date(deadI.value).getTime() : undefined,
-        goals: splitList(goalsI.value),
-        constraints: splitList(consI.value),
-        affordable_loss: lossI.value.trim(),
-        reversibility: revSel.value || undefined,
-        chart_id: state.chartId || undefined,
-      };
-      const { id } = await API.call('/decisions', { method: 'POST', body });
-      overlay.remove();
-      go('decisions/' + id);
-    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '创建决策 →'; }
-  };
-
-  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:520px' },
-    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
-    el('h3', {}, '新建一个重大决策'),
-    el('div', { class: 'muted' }, '好的决策，从把问题问清楚开始。'),
-    err,
-    el('div', { class: 'field' }, el('label', {}, '决策标题 *'), titleI),
-    el('div', { class: 'field' }, el('label', {}, '问题陈述'), stmtI),
-    el('div', { class: 'row2' },
-      el('div', { class: 'field' }, el('label', {}, '决策截止日'), deadI),
-      el('div', { class: 'field' }, el('label', {}, '可逆性'), revSel)),
-    el('div', { class: 'field' }, el('label', {}, '目标'), goalsI),
-    el('div', { class: 'field' }, el('label', {}, '硬约束'), consI),
-    el('div', { class: 'field' }, el('label', {}, '可承受的最大损失'), lossI),
-    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '创建决策 →'));
-  overlay.append(modal); document.body.append(overlay);
-  setTimeout(() => titleI.focus(), 50);
-}
-
-function splitList(s) { return String(s || '').split(/[,，、;；\n]/).map((x) => x.trim()).filter(Boolean); }
-
-// ---- DETAIL ----
-async function renderDecisionDetail(container, id) {
-  container.innerHTML = '';
-  container.append(el('div', { class: 'typing', style: 'margin:40px auto' }, '载入决策…'));
-  let data;
-  try { data = await API.call('/decisions/' + id); }
-  catch (e) { container.innerHTML = ''; container.append(el('div', { class: 'dec-empty' }, el('h3', {}, '找不到这个决策'), el('button', { class: 'btn btn-ghost', style: 'margin-top:12px', onclick: () => go('decisions') }, '← 返回决策台'))); return; }
-  const d = data.decision;
-  decState.current = d;
-  decState.options = data.options || [];
-  decState.evidence = data.evidence || [];
-  decState.actions = data.actions || [];
-  decState.reviews = data.reviews || [];
-  decState.analysis = null;
-
-  container.innerHTML = '';
-  const back = el('a', { class: 'dec-back', onclick: () => go('decisions') }, '← 决策台');
-
-  const goals = safeArr(d.goals), cons = safeArr(d.constraints), vals = safeArr(d.values_rank);
-  const header = el('div', { class: 'dec-detail-head' },
-    el('span', { class: 'dec-status s-' + (d.status || 'open') }, STATUS_LABEL[d.status] || d.status),
-    el('h1', {}, d.title),
-    d.statement ? el('p', { class: 'dec-stmt' }, d.statement) : null,
-    el('div', { class: 'dec-meta' },
-      d.deadline_at ? el('span', {}, '⏳ 截止 ' + fmtDate(d.deadline_at)) : null,
-      d.reversibility ? el('span', {}, '🔁 ' + revLabel(d.reversibility)) : null,
-      d.affordable_loss ? el('span', {}, '🛡 可承受损失：' + d.affordable_loss) : null),
-    goals.length ? tagRow('目标', goals) : null,
-    cons.length ? tagRow('硬约束', cons) : null,
-    vals.length ? tagRow('价值排序', vals) : null);
-
-  container.append(back, header,
-    optionsSection(id),
-    evidenceSection(id),
-    analyzeSection(id),
-    actionsSection(id),
-    reviewSection(id));
-}
-
-function revLabel(v) { return { reversible: '基本可逆', partially: '部分可逆', irreversible: '几乎不可逆' }[v] || v; }
-function safeArr(s) { try { const v = typeof s === 'string' ? JSON.parse(s) : s; return Array.isArray(v) ? v : []; } catch { return []; } }
-function tagRow(label, items) {
-  return el('div', { class: 'dec-tagrow' }, el('span', { class: 'dec-tag-lab' }, label),
-    ...items.map((t) => el('span', { class: 'dec-tag' }, t)));
-}
-
-function decSection(title, sub, ...body) {
-  return el('section', { class: 'dec-section' },
-    el('div', { class: 'dec-section-head' }, el('h2', {}, title), sub ? el('p', {}, sub) : null),
-    ...body);
-}
-
-// ---- OPTIONS + RISK MATRIX ----
-function optionsSection(decId) {
-  const wrap = el('div', { class: 'opt-list' });
-  const renderOpts = () => {
-    wrap.innerHTML = '';
-    if (!decState.options.length) { wrap.append(el('div', { class: 'dec-hint' }, '还没有备选项。至少加入 2 个选项（含「维持现状」），对比才有意义。')); }
-    decState.options.forEach((o) => wrap.append(optionCard(o)));
-    wrap.append(el('button', { class: 'btn btn-ghost dec-add', onclick: () => openOptionModal(decId, renderOpts) }, '＋ 添加选项'));
-  };
-  renderOpts();
-  return decSection('① 备选项与风险矩阵', '每个选项都写清上行空间、下行风险、你主观估计的成功概率、最坏情况与止损线——这是决策质量的核心。', wrap);
-}
-
-function optionCard(o) {
-  const prob = (o.subjective_prob != null && o.subjective_prob !== '') ? Math.round(Number(o.subjective_prob) * 100) + '%' : '—';
-  return el('div', { class: 'opt-card' },
-    el('div', { class: 'opt-card-h' }, el('h4', {}, o.label), el('span', { class: 'opt-prob', title: '你主观估计的成功概率' }, '成功概率 ' + prob)),
-    el('div', { class: 'opt-matrix' },
-      matrixCell('↗ 上行空间', o.upside, 'up'),
-      matrixCell('↘ 下行风险', o.downside, 'down'),
-      matrixCell('⚠ 最坏情况', o.worst_case, 'worst'),
-      matrixCell('🛑 止损线', o.stop_loss, 'stop')));
-}
-function matrixCell(label, val, kind) {
-  return el('div', { class: 'mx-cell mx-' + kind },
-    el('div', { class: 'mx-lab' }, label),
-    el('div', { class: 'mx-val' }, val && String(val).trim() ? val : el('span', { class: 'mx-empty' }, '未填写')));
-}
-
-function openOptionModal(decId, onDone) {
-  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
-  const err = el('div', { class: 'err', style: 'display:none' });
-  const labelI = el('input', { type: 'text', placeholder: '如：接受 offer / 维持现状 / 再等三个月' });
-  const upI = el('textarea', { rows: '2', placeholder: '如果顺利，最好能得到什么？' });
-  const downI = el('textarea', { rows: '2', placeholder: '如果不顺利，会失去/付出什么？' });
-  const probI = el('input', { type: 'number', min: '0', max: '100', step: '1', placeholder: '你主观估计的成功概率 %（如 60）' });
-  const worstI = el('input', { type: 'text', placeholder: '最坏情况具体是什么？' });
-  const stopI = el('input', { type: 'text', placeholder: '出现什么信号就必须止损/退出？' });
-
-  const submit = async () => {
-    err.style.display = 'none';
-    if (!labelI.value.trim()) { err.textContent = '请填写选项名称'; err.style.display = 'block'; return; }
-    const btn = overlay.querySelector('.btn-gold'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 保存中…';
-    try {
-      let prob = probI.value.trim() === '' ? undefined : Number(probI.value) / 100;
-      if (prob != null && (prob < 0 || prob > 1)) prob = Math.max(0, Math.min(1, prob));
-      const { id } = await API.call(`/decisions/${decId}/options`, { method: 'POST', body: {
-        label: labelI.value.trim(), upside: upI.value.trim(), downside: downI.value.trim(),
-        subjective_prob: prob, worst_case: worstI.value.trim(), stop_loss: stopI.value.trim(),
-        sort_order: decState.options.length,
-      } });
-      decState.options.push({ id, label: labelI.value.trim(), upside: upI.value.trim(), downside: downI.value.trim(), subjective_prob: prob, worst_case: worstI.value.trim(), stop_loss: stopI.value.trim() });
-      overlay.remove(); onDone();
-    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '保存选项'; }
-  };
-
-  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:520px' },
-    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
-    el('h3', {}, '添加一个选项'),
-    err,
-    el('div', { class: 'field' }, el('label', {}, '选项名称 *'), labelI),
-    el('div', { class: 'row2' },
-      el('div', { class: 'field' }, el('label', {}, '上行空间'), upI),
-      el('div', { class: 'field' }, el('label', {}, '下行风险'), downI)),
-    el('div', { class: 'field' }, el('label', {}, '主观成功概率（%）'), probI),
-    el('div', { class: 'field' }, el('label', {}, '最坏情况'), worstI),
-    el('div', { class: 'field' }, el('label', {}, '止损线'), stopI),
-    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '保存选项'));
-  overlay.append(modal); document.body.append(overlay);
-  setTimeout(() => labelI.focus(), 50);
-}
-
-// ---- EVIDENCE ----
-function evidenceSection(decId) {
-  const wrap = el('div', { class: 'ev-list' });
-  const renderEv = () => {
-    wrap.innerHTML = '';
-    if (!decState.evidence.length) wrap.append(el('div', { class: 'dec-hint' }, '把「支持」与「反对」的证据分开记录，避免只看对自己有利的信息。'));
-    decState.evidence.forEach((e) => wrap.append(
-      el('div', { class: 'ev-item ev-' + (e.stance || 'neutral') },
-        el('span', { class: 'ev-badge' }, e.stance === 'support' ? '支持' : e.stance === 'against' ? '反对' : '中性'),
-        el('span', { class: 'ev-txt' }, e.content))));
-    wrap.append(el('button', { class: 'btn btn-ghost dec-add', onclick: () => openEvidenceModal(decId, renderEv) }, '＋ 添加证据'));
-  };
-  renderEv();
-  return decSection('② 证据（区分支持 / 反对）', '决策质量取决于是否认真找过反面证据。', wrap);
-}
-
-function openEvidenceModal(decId, onDone) {
-  // Evidence uses the /options endpoint? No — evidence is read-only from GET; there is no POST evidence route.
-  // Provide a lightweight local-only note that we persist via a decision "note" — but backend has no evidence POST.
-  // So we keep evidence editing client-side and fold it into analyze input is not possible; inform honestly.
-  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
-  const err = el('div', { class: 'err', style: 'display:none' });
-  const stance = el('select', {}, el('option', { value: 'support' }, '支持'), el('option', { value: 'against' }, '反对'), el('option', { value: 'neutral' }, '中性'));
-  const txt = el('textarea', { rows: '3', placeholder: '一条具体、可验证的证据或事实' });
-  const submit = async () => {
-    err.style.display = 'none';
-    if (!txt.value.trim()) { err.textContent = '请填写证据内容'; err.style.display = 'block'; return; }
-    // Persist locally in decState (no server evidence-write endpoint yet — tracked in PROGRESS.md).
-    decState.evidence.push({ id: 'local-' + Date.now(), stance: stance.value, content: txt.value.trim(), _local: true });
-    overlay.remove(); onDone();
-  };
-  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:480px' },
-    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
-    el('h3', {}, '添加一条证据'),
-    el('div', { class: 'muted' }, '当前证据在本次会话内使用（服务端持久化端点在开发中，见 PROGRESS.md）。'),
-    err,
-    el('div', { class: 'field' }, el('label', {}, '立场'), stance),
-    el('div', { class: 'field' }, el('label', {}, '证据内容'), txt),
-    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '添加'));
-  overlay.append(modal); document.body.append(overlay);
-  setTimeout(() => txt.focus(), 50);
-}
-
-// ---- AI STRUCTURED ANALYSIS ----
-function analyzeSection(decId) {
-  const box = el('div', { class: 'analyze-box' });
-  const runBtn = el('button', { class: 'btn btn-gold', onclick: () => runAnalyze(decId, box, runBtn) }, '🧠 生成结构化分析');
-  const credits = state.user && state.user.plan === 'free' ? el('span', { class: 'analyze-quota' }, `将消耗 1 次分析额度（剩余 ${state.user.credits}）`) : el('span', { class: 'analyze-quota' }, 'Core 会员：每月公平使用额度');
-  box.append(el('div', { class: 'analyze-cta' }, runBtn, credits));
-  return decSection('③ AI 结构化分析', 'AI 帮你把「事实 / 假设 / 文化反思 / 风险」分开，绝不替你拍板，也不会把命理当成现实因果。', box);
-}
-
-async function runAnalyze(decId, box, btn) {
-  if (decState.busy) return; decState.busy = true;
-  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 分析中…';
-  try {
-    const { analysis } = await API.call(`/decisions/${decId}/analyze`, { method: 'POST', body: { evidence: decState.evidence } });
-    decState.analysis = analysis;
-    if (state.user && state.user.plan === 'free' && typeof state.user.credits === 'number') state.user.credits = Math.max(0, state.user.credits - 1);
-    box.innerHTML = '';
-    box.append(renderAnalysis(analysis, decId, box, btn));
-  } catch (e) {
-    btn.disabled = false; btn.innerHTML = '🧠 生成结构化分析';
-    if (e.status === 402) { toast('本期 AI 额度已用完，升级 Core 获得更多分析'); setTimeout(() => go('pricing'), 500); }
-    else toast(e.message || '分析失败');
-  } finally { decState.busy = false; }
-}
-
-function renderAnalysis(a, decId, box, btn) {
-  const frag = el('div', { class: 'analysis' });
-  // Degraded / mode banner
-  frag.append(el('div', { class: 'analysis-mode' + (a.degraded ? ' degraded' : '') },
-    a.degraded ? '⚙ 本次为本地结构化分析（未配置外部 AI 模型，数据不出站）。' : '✓ 已启用增强分析。'));
-
-  const block = (title, items, cls, note) => {
-    const list = (items || []).filter((x) => x != null && String(x).trim() !== '');
-    if (!list.length && !note) return null;
-    return el('div', { class: 'an-block ' + cls },
-      el('h4', {}, title), note ? el('p', { class: 'an-note' }, note) : null,
-      list.length ? el('ul', {}, ...list.map((x) => el('li', {}, typeof x === 'string' ? x : JSON.stringify(x)))) : el('p', { class: 'an-empty' }, '（无）'));
-  };
-
-  frag.append(
-    block('✅ 你陈述的目标', a.user_stated_goals, 'an-facts'),
-    block('📌 硬约束', a.constraints, 'an-facts'),
-    block('🔎 已知事实', a.facts, 'an-facts', a.facts && a.facts.length ? null : 'AI 未从你提供的信息中提取到确凿事实——补充更多客观信息会让分析更可靠。'),
-    block('❓ 关键假设（需你验证）', a.assumptions, 'an-assume', '以下是推断而非事实，做决定前请尽量核实。'),
-    block('🕳 信息缺口', a.missing_information, 'an-assume'),
-    block('🧭 军师建议（仅供参考）', a.recommendations, 'an-advice', 'AI 推断，非确定性结论。'),
-    block('🀄 文化反思镜头', a.cultural_reflections, 'an-culture', '命理/传统视角仅用于自我反思，不构成现实因果或决策依据。'),
-    block('⚠ 风险', a.risks, 'an-risk'),
-    block('🌫 不确定性', a.uncertainties, 'an-risk'),
-    block('🛑 止损条件', a.stop_loss_conditions, 'an-risk'),
-    block('🚦 安全提示', a.safety_flags, 'an-safety'),
-    block('👉 建议的下一步行动', a.actions, 'an-actions'));
-
-  // disclaimer — always shown
-  frag.append(el('div', { class: 'an-disclaimer' }, '⚖ ' + (a.disclaimer || 'AI 与文化模块的输出用于辅助思考，不构成职业/投资/医疗/法律/婚姻的确定性建议。最终决定与责任在你自己。')));
-  frag.append(el('button', { class: 'btn btn-ghost', style: 'margin-top:8px', onclick: () => { box.innerHTML = ''; box.append(el('div', { class: 'analyze-cta' }, btn)); btn.disabled = false; btn.innerHTML = '🧠 重新生成分析'; } }, '重新分析'));
-  return frag;
-}
-
-// ---- ACTIONS ----
-function actionsSection(decId) {
-  const wrap = el('div', { class: 'act-list' });
-  const renderActs = () => {
-    wrap.innerHTML = '';
-    if (!decState.actions.length) wrap.append(el('div', { class: 'dec-hint' }, '把决定拆成 7 天内可验证的具体动作，才不会停留在想。'));
-    decState.actions.forEach((a) => wrap.append(
-      el('div', { class: 'act-item' },
-        el('span', { class: 'act-check act-' + (a.status || 'todo') }, a.status === 'done' ? '✓' : '○'),
-        el('div', { class: 'act-body' }, el('div', { class: 'act-txt' }, a.content),
-          el('div', { class: 'act-meta' }, [a.owner ? '负责人 ' + a.owner : null, a.due_at ? '截止 ' + fmtDate(a.due_at) : null].filter(Boolean).join(' · '))))));
-    wrap.append(el('button', { class: 'btn btn-ghost dec-add', onclick: () => openActionModal(decId, renderActs) }, '＋ 添加行动'));
-  };
-  renderActs();
-  return decSection('④ 行动计划', '决策的价值在执行。给每个动作一个负责人和截止日。', wrap);
-}
-
-function openActionModal(decId, onDone) {
-  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
-  const err = el('div', { class: 'err', style: 'display:none' });
-  const contentI = el('input', { type: 'text', placeholder: '如：本周约两位业内前辈聊 offer B 的真实情况' });
-  const ownerI = el('input', { type: 'text', placeholder: '负责人（默认自己）' });
-  const dueI = el('input', { type: 'date' });
-  const submit = async () => {
-    err.style.display = 'none';
-    if (!contentI.value.trim()) { err.textContent = '请填写行动内容'; err.style.display = 'block'; return; }
-    const btn = overlay.querySelector('.btn-gold'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 保存中…';
-    try {
-      const { id } = await API.call(`/decisions/${decId}/actions`, { method: 'POST', body: {
-        content: contentI.value.trim(), owner: ownerI.value.trim(), due_at: dueI.value ? new Date(dueI.value).getTime() : undefined } });
-      decState.actions.push({ id, content: contentI.value.trim(), owner: ownerI.value.trim(), due_at: dueI.value ? new Date(dueI.value).getTime() : null, status: 'todo' });
-      overlay.remove(); onDone();
-    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '保存行动'; }
-  };
-  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:480px' },
-    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
-    el('h3', {}, '添加一个行动'),
-    err,
-    el('div', { class: 'field' }, el('label', {}, '行动 *'), contentI),
-    el('div', { class: 'row2' },
-      el('div', { class: 'field' }, el('label', {}, '负责人'), ownerI),
-      el('div', { class: 'field' }, el('label', {}, '截止日'), dueI)),
-    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '保存行动'));
-  overlay.append(modal); document.body.append(overlay);
-  setTimeout(() => contentI.focus(), 50);
-}
-
-// ---- REVIEW ----
-function reviewSection(decId) {
-  const wrap = el('div', { class: 'rev-list' });
-  const renderRev = () => {
-    wrap.innerHTML = '';
-    if (!decState.reviews.length) wrap.append(el('div', { class: 'dec-hint' }, '决定之后 30/90 天回来复盘：结果如何？当初的建议是否奏效？这样系统才能帮你校准判断。'));
-    decState.reviews.forEach((r) => wrap.append(
-      el('div', { class: 'rev-item' },
-        el('div', { class: 'rev-h' }, el('span', {}, '复盘 · ' + fmtDate(r.review_at || r.created_at)),
-          el('span', { class: 'rev-sat' }, r.satisfaction != null ? '满意度 ' + r.satisfaction + '/5' : ''),
-          el('span', { class: 'rev-worked' }, r.advice_worked ? '建议奏效 ✓' : '建议未奏效')),
-        r.outcome ? el('p', { class: 'rev-outcome' }, r.outcome) : null,
-        r.notes ? el('p', { class: 'rev-notes' }, r.notes) : null)));
-    wrap.append(el('button', { class: 'btn btn-ghost dec-add', onclick: () => openReviewModal(decId, renderRev) }, '＋ 记录一次复盘'));
-  };
-  renderRev();
-  return decSection('⑤ 复盘与校准', '记录真实结果，才知道当初的判断是否可靠。', wrap);
-}
-
-function openReviewModal(decId, onDone) {
-  const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
-  const err = el('div', { class: 'err', style: 'display:none' });
-  const outcomeI = el('textarea', { rows: '3', placeholder: '实际发生了什么？结果如何？' });
-  const satSel = el('select', {}, el('option', { value: '' }, '你对结果的满意度'),
-    ...[1, 2, 3, 4, 5].map((n) => el('option', { value: String(n) }, n + ' / 5')));
-  const workedSel = el('select', {}, el('option', { value: '' }, '当初的分析/建议是否奏效？'),
-    el('option', { value: '1' }, '奏效'), el('option', { value: '0' }, '未奏效'));
-  const notesI = el('textarea', { rows: '2', placeholder: '你学到了什么？下次会怎么做？' });
-  const submit = async () => {
-    err.style.display = 'none';
-    if (!outcomeI.value.trim()) { err.textContent = '请填写实际结果'; err.style.display = 'block'; return; }
-    const btn = overlay.querySelector('.btn-gold'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 保存中…';
-    try {
-      const { id } = await API.call(`/decisions/${decId}/reviews`, { method: 'POST', body: {
-        outcome: outcomeI.value.trim(), satisfaction: satSel.value ? Number(satSel.value) : undefined,
-        advice_worked: workedSel.value === '1', notes: notesI.value.trim() } });
-      decState.reviews.push({ id, review_at: Date.now(), outcome: outcomeI.value.trim(), satisfaction: satSel.value ? Number(satSel.value) : null, advice_worked: workedSel.value === '1' ? 1 : 0, notes: notesI.value.trim() });
-      overlay.remove(); onDone();
-    } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = '保存复盘'; }
-  };
-  const modal = el('div', { class: 'modal', style: 'position:relative;max-width:480px' },
-    el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
-    el('h3', {}, '记录一次复盘'),
-    err,
-    el('div', { class: 'field' }, el('label', {}, '实际结果 *'), outcomeI),
-    el('div', { class: 'row2' },
-      el('div', { class: 'field' }, el('label', {}, '满意度'), satSel),
-      el('div', { class: 'field' }, el('label', {}, '建议是否奏效'), workedSel)),
-    el('div', { class: 'field' }, el('label', {}, '经验记录'), notesI),
-    el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit }, '保存复盘'));
-  overlay.append(modal); document.body.append(overlay);
-  setTimeout(() => outcomeI.focus(), 50);
-}
-
-// ============================================================
-//  ACCOUNT — privacy & data control (MED-9): opt-in memory,
-//  view/delete memories, export, account deletion
-// ============================================================
-route('account', async () => {
-  app().append(navBar());
-  const container = el('div', { class: 'decwrap' });
-  app().append(container);
-  container.append(el('div', { class: 'typing', style: 'margin:40px auto' }, '载入账户…'));
-  let me, mems = [];
-  try {
-    me = (await API.call('/me')).user;
-    mems = (await API.call('/me/memories')).memories || [];
-  } catch (e) { toast(e.message); }
-  state.user = me || state.user;
-  container.innerHTML = '';
-
-  const head = el('div', { class: 'dec-head' },
-    el('div', {}, el('div', { class: 'k' }, 'PRIVACY & DATA'), el('h2', {}, '隐私与数据控制'),
-      el('p', { class: 'dec-sub' }, '你的数据由你掌控。长期记忆默认关闭，只有你主动开启后，系统才会记住你的偏好；你随时可以查看、删除、导出或彻底注销。')));
-
-  // memory opt-in toggle
-  const optState = { on: !!(state.user && state.user.memory_opt_in) };
-  const toggle = el('button', { class: 'dec-toggle' + (optState.on ? ' on' : '') });
-  const setToggle = () => { toggle.className = 'dec-toggle' + (optState.on ? ' on' : ''); toggle.textContent = optState.on ? '已开启' : '已关闭'; };
-  setToggle();
-  toggle.addEventListener('click', async () => {
-    try {
-      const r = await API.call('/me/memory-optin', { method: 'POST', body: { enabled: !optState.on } });
-      optState.on = !!r.memory_opt_in; if (state.user) state.user.memory_opt_in = optState.on; setToggle();
-      toast(optState.on ? '已开启长期记忆' : '已关闭长期记忆');
-    } catch (e) { toast(e.message); }
-  });
-
-  const memWrap = el('div', { class: 'mem-list' });
-  const renderMems = () => {
-    memWrap.innerHTML = '';
-    if (!mems.length) { memWrap.append(el('div', { class: 'dec-hint' }, '暂无长期记忆记录。')); return; }
-    mems.forEach((m) => memWrap.append(
-      el('div', { class: 'mem-item' },
-        el('div', { class: 'mem-txt' }, el('span', { class: 'mem-kind' }, m.kind || 'note'), m.content),
-        el('button', { class: 'mem-del', onclick: async () => {
-          try { await API.call('/me/memories/' + m.id, { method: 'DELETE' }); mems = mems.filter((x) => x.id !== m.id); renderMems(); toast('已删除'); }
-          catch (e) { toast(e.message); } } }, '删除'))));
-  };
-  renderMems();
-
-  const exportBtn = el('button', { class: 'btn btn-ghost', onclick: async () => {
-    try {
-      const data = await API.call('/me/export');
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = el('a', { href: url, download: 'meridian-export.json' }); document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      toast('数据已导出');
-    } catch (e) { toast(e.message); }
-  } }, '导出我的全部数据 (JSON)');
-
-  const delBtn = el('button', { class: 'btn btn-danger', onclick: async () => {
-    if (!confirm('确定要永久注销账户吗？你的命盘、对话、决策、记忆将被彻底删除，且不可恢复。')) return;
-    if (!confirm('再次确认：此操作不可撤销。')) return;
-    try { await API.call('/me', { method: 'DELETE' }); API.setToken(null); state.user = null; toast('账户已注销'); go('home'); }
-    catch (e) { toast(e.message); }
-  } }, '永久注销账户');
-
-  container.append(head,
-    decSection('长期记忆', '默认关闭。开启后，系统会在对话中记住你的目标与偏好，让建议更贴合你。',
-      el('div', { class: 'opt-toggle-row' }, el('span', {}, '允许记住我的长期偏好'), toggle)),
-    decSection('记忆内容', '你可以随时删除任意一条。', memWrap),
-    decSection('数据可携与注销', '你拥有完整的数据主权。',
-      el('div', { class: 'acct-actions' }, exportBtn, delBtn)));
-});
 
 // ---- launch ----
 boot();

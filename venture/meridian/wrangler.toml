@@ -28,3 +28,5 @@ ENVIRONMENT = "development"
 LLM_ALLOWED_HOSTS = ""
 # Mock payment provider. MUST be unset/'disabled' in production.
 PAYMENTS_MOCK = "enabled"
+# Admin dashboard token (dev only). In production set via `wrangler secret put ADMIN_TOKEN`.
+ADMIN_TOKEN = "dev-admin-token-change-me"
