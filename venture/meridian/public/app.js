@@ -1,5 +1,8 @@
 // 子午·合盘 (Meridian Sync) — vanilla JS SPA, no build step. Talks to the Hono/D1 backend.
 // Product: 东方合盘 / 缘分洞察 — 看懂你俩的缘分。
+// i18n: 8 locales, real-time switching, culturally adapted copy. See i18n.js.
+
+import { I18N, LOCALES, PRICES } from './i18n.js';
 
 const API = {
   token: localStorage.getItem('mrd_token') || null,
@@ -38,153 +41,29 @@ function toast(msg) {
 }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m])); }
 
-// ---- i18n ----
-const I18N = {
-  zh: {
-    nav_how: '如何运作', nav_stories: '真实故事', nav_pricing: '价格', nav_faq: '常见问题',
-    nav_login: '登录', nav_start: '免费测缘分 →', nav_mine: '我的合盘', nav_new: '新建合盘',
-    nav_account: '隐私与数据', nav_logout: '退出',
-    brand_sub: 'MERIDIAN SYNC',
-    hero_eyebrow: '东方合盘 · 缘分洞察',
-    hero_title: '看懂你俩的缘分',
-    hero_sub: '他到底怎么想？你们能走多远？下一步该怎么做？\n用东方合盘，把说不清的感觉，变成看得懂的答案。',
-    hero_cta: '免费测一次缘分',
-    hero_note: '30 秒出结果 · 无需下载 · 注册即送 3 次完整报告',
-    try_h: '免费测你俩的缘分',
-    try_sub: '填两个人的出生信息，先看免费速览。',
-    rel_romance: '恋爱中', rel_crush: '暧昧 / 单恋', rel_reunion: '想复合', rel_marriage: '备婚 / 合婚', rel_friendship: '朋友 / 合作',
-    label_you: '你', label_ta: 'TA',
-    f_name: '称呼', f_gender: '性别', f_date: '出生日期', f_time: '出生时间', f_place: '出生城市',
-    g_female: '女', g_male: '男',
-    try_btn: '生成免费速览', try_loading: '正在合盘…',
-    preview_score: '缘分总分', preview_locked: '完整报告已锁定',
-    preview_unlock_hint: '解锁后可看：吸引力真相 · 你们的甜蜜与摩擦 · 未来 6 个月运势 · 下一步具体建议',
-    preview_save: '保存并解锁完整报告',
-    preview_login_first: '登录后即可保存并解锁（新用户送 3 次）',
-    problem_h: '你是不是也这样',
-    p1: '他忽冷忽热，我永远猜不透他在想什么。',
-    p2: '我们很相爱，却总为同样的事吵架，不知道问题出在哪。',
-    p3: '分手了，但我还放不下，到底还有没有可能？',
-    p4: '要结婚了，长辈让我们合个八字，我想知道真的合不合。',
-    how_h: '它到底怎么帮你',
-    feat1_t: '把「感觉」变成「答案」',
-    feat1_d: '用天干五合、地支六合、五行生克这些真实的东方合盘方法，算出你俩的吸引力、契合度、长久度——每一条结论都标明依据，不是玄乎的一句话。',
-    feat2_t: '不只是分数，是「下一步」',
-    feat2_d: '我们不只告诉你「合不合」，更告诉你「怎么办」：他为什么忽冷忽热、你们最容易在哪炸、未来 6 个月哪个月适合表白 / 谈事 / 冷处理。',
-    feat3_t: '一张卡片，两个人看',
-    feat3_d: '生成专属缘分卡片，发给 TA、发到闺蜜群。对方点开也想测测自己的——这就是它天然会传播的原因。',
-    stories_h: '他们用它，说清了那句一直说不出口的话',
-    story1: '「测完把卡片发给他，他主动问我要不要试试复合。憋了三个月的话，一张卡片替我说了。」', story1m: '— 小M，26，想复合',
-    story2: '「一直以为是我不够好，报告说我们其实是五行互补，只是节奏不同。那天我们第一次没吵架。」', story2m: '— 阿哲，29，恋爱中',
-    story3: '「备婚焦虑到失眠，合婚报告把双方家庭、性格、节奏都讲透了，我妈看完也放心了。」', story3m: '— Luna，31，备婚',
-    stories_note: '以上为产品使用场景示例，非真实用户承诺；缘分洞察用于增进理解与自我觉察。',
-    pricing_h: '价格',
-    pricing_sub: '先免费测，觉得说到心里了，再决定要不要看完整报告。',
-    plan_free_n: '免费速览', plan_free_p: '¥0', plan_free_d: '注册即送 3 次完整报告解锁',
-    plan_lite_n: '缘分完整报告', plan_lite_p: '¥19', plan_lite_d: '单次 · 一段关系',
-    plan_month_n: '子午会员', plan_month_p: '¥39/月', plan_month_d: '每月 6 份报告 + 无限速览',
-    plan_marry_n: '合婚 · 深度定制', plan_marry_p: '¥399', plan_marry_d: '备婚级 · 双方家庭 + 择日建议',
-    plan_cta_free: '免费开始', plan_cta: '选择', plan_pop: '最受欢迎',
-    faq_h: '常见问题',
-    faq_q1: '这是算命 / 迷信吗？', faq_a1: '它是东方文化视角下的关系洞察工具。所有结论基于八字合盘的传统方法（五合、六合、生克等）与心理反思，用于帮你理解关系、做出更清醒的选择——不预测「命中注定」，也不替你做决定。',
-    faq_q2: '会不会像某些 App 那样偷偷扣费、自动续费坑人？', faq_a2: '不会。我们最讨厌这种套路。会员随时可取消，单次报告就是单次，绝不默认勾选自动续费、绝不隐藏扣费。这是我们的底线。',
-    faq_q3: '需要对方配合吗？', faq_a3: '不需要。你只要知道对方的出生日期（时间/城市更准），就能生成合盘。当然，把卡片发给 TA 一起看，体验会更好。',
-    faq_q4: '我的隐私安全吗？', faq_a4: '出生信息仅用于合盘计算。分享卡片上不含任何出生隐私。你可随时导出或永久删除全部数据。',
-    faq_q5: '准不准？', faq_a5: '我们不吹「100% 准确」——那是骗人的。每份报告你都能反馈「说中了 / 部分 / 没说中」，我们用这些反馈持续校准。诚实，是我们唯一的护城河。',
-    cta_h: '别再一个人猜了',
-    cta_sub: '30 秒，先免费看看你俩的缘分速览。',
-    cta_btn: '免费测一次',
-    foot_tag: '东方合盘 · 缘分洞察',
-    foot_disc: '子午·合盘提供东方文化视角下的关系洞察，用于增进理解与自我觉察，不构成婚恋、医疗、法律或投资建议。',
-    mine_h: '我的合盘', mine_new: '+ 新建合盘',
-    mine_empty_t: '还没有合盘记录', mine_empty_d: '测一次你俩的缘分，30 秒出结果。', mine_empty_btn: '开始第一次合盘',
-    new_h: '新建合盘',
-    unlock_h: '解锁完整报告', unlock_credits: '你还有 {n} 次免费解锁',
-    unlock_btn_free: '用 1 次额度解锁（免费）', unlock_btn_pay: '解锁需要额度，去获取',
-    unlock_member: '会员可无限解锁',
-    rep_strengths: '你们的甜蜜 / 优势', rep_frictions: '容易踩的坑', rep_dynamic: '你俩的相处模式',
-    rep_advice: '下一步该怎么做', rep_timing: '未来 6 个月运势',
-    rep_share: '生成缘分卡片分享', rep_feedback_q: '这份报告说到你心里了吗？',
-    fb_hit: '说中了', fb_part: '部分说中', fb_miss: '没说中', fb_thanks: '谢谢你的反馈，它让我们更准。',
-    acct_h: '隐私与数据',
-    lang_toggle: 'EN',
-  },
-  en: {
-    nav_how: 'How it works', nav_stories: 'Stories', nav_pricing: 'Pricing', nav_faq: 'FAQ',
-    nav_login: 'Log in', nav_start: 'Free reading →', nav_mine: 'My readings', nav_new: 'New reading',
-    nav_account: 'Privacy & Data', nav_logout: 'Log out',
-    brand_sub: 'MERIDIAN SYNC',
-    hero_eyebrow: 'Eastern Synastry · Relationship Insight',
-    hero_title: 'Understand what you two really are',
-    hero_sub: 'What is he really thinking? How far can you go? What should you do next?\nEastern synastry turns a feeling you can\u2019t explain into an answer you can act on.',
-    hero_cta: 'Get a free reading',
-    hero_note: '30-second result · No download · 3 full reports free on sign-up',
-    try_h: 'Free compatibility reading',
-    try_sub: 'Enter both birth details for a free preview.',
-    rel_romance: 'Dating', rel_crush: 'Crush / one-sided', rel_reunion: 'Want to reunite', rel_marriage: 'Marriage match', rel_friendship: 'Friends / partners',
-    label_you: 'You', label_ta: 'Them',
-    f_name: 'Name', f_gender: 'Gender', f_date: 'Birth date', f_time: 'Birth time', f_place: 'Birth city',
-    g_female: 'Female', g_male: 'Male',
-    try_btn: 'Generate free preview', try_loading: 'Syncing…',
-    preview_score: 'Compatibility', preview_locked: 'Full report locked',
-    preview_unlock_hint: 'Unlock to see: the truth of your attraction · sweetness & friction · next 6 months · what to do next',
-    preview_save: 'Save & unlock full report',
-    preview_login_first: 'Log in to save & unlock (3 free for new users)',
-    problem_h: 'Sound familiar?',
-    p1: 'He runs hot and cold — I can never tell what he\u2019s thinking.',
-    p2: 'We love each other but fight over the same thing again and again.',
-    p3: 'We broke up but I can\u2019t let go. Is there still a chance?',
-    p4: 'We\u2019re getting married and the elders want a compatibility check.',
-    how_h: 'How it actually helps you',
-    feat1_t: 'Turn a feeling into an answer',
-    feat1_d: 'Real Eastern synastry methods — stem combinations, branch harmonies, five-element cycles — compute your attraction, fit and longevity. Every conclusion cites its basis.',
-    feat2_t: 'Not just a score — a next step',
-    feat2_d: 'We don\u2019t just say whether you match. We tell you why he blows hot and cold, where you\u2019ll clash, and which of the next 6 months suits confessing / talking / stepping back.',
-    feat3_t: 'One card, two people',
-    feat3_d: 'Generate a shareable compatibility card. Send it to them or your group chat. They\u2019ll want to test their own — that\u2019s why it spreads.',
-    stories_h: 'People used it to finally say the thing',
-    story1: '“I sent him the card. He asked me himself if we should try again. Three months of words — one card said them.”', story1m: '— Mia, 26, reuniting',
-    story2: '“I thought I wasn\u2019t good enough. The report said we complement each other, just at different tempos.”', story2m: '— Zhe, 29, dating',
-    story3: '“Wedding anxiety kept me up. The marriage report walked through both families — even my mother relaxed.”', story3m: '— Luna, 31, engaged',
-    stories_note: 'Illustrative usage scenarios, not user guarantees. Insights are for reflection and self-awareness.',
-    pricing_h: 'Pricing',
-    pricing_sub: 'Read free first. If it speaks to you, then unlock the full report.',
-    plan_free_n: 'Free preview', plan_free_p: '$0', plan_free_d: '3 full-report unlocks on sign-up',
-    plan_lite_n: 'Full report', plan_lite_p: '$3', plan_lite_d: 'One-time · one relationship',
-    plan_month_n: 'Meridian Member', plan_month_p: '$6/mo', plan_month_d: '6 reports/mo + unlimited previews',
-    plan_marry_n: 'Marriage · Deluxe', plan_marry_p: '$59', plan_marry_d: 'Both families + timing advice',
-    plan_cta_free: 'Start free', plan_cta: 'Choose', plan_pop: 'Most popular',
-    faq_h: 'FAQ',
-    faq_q1: 'Is this fortune-telling / superstition?', faq_a1: 'It\u2019s a relationship-insight tool through an Eastern-culture lens. Conclusions are based on traditional synastry methods and psychological reflection — to help you understand a relationship and choose clearly. It does not predict destiny or decide for you.',
-    faq_q2: 'Will it secretly auto-charge me like some apps?', faq_a2: 'No. We hate that. Cancel any time; one-time is one-time; no pre-checked auto-renew, no hidden charges. That\u2019s our line.',
-    faq_q3: 'Do I need the other person?', faq_a3: 'No. Just their birth date (time/city improve accuracy). Sharing the card together is a nicer experience though.',
-    faq_q4: 'Is my privacy safe?', faq_a4: 'Birth info is used only for the calculation. Share cards contain no birth privacy. Export or permanently delete all your data any time.',
-    faq_q5: 'Is it accurate?', faq_a5: 'We won\u2019t claim 100% accuracy — that\u2019s a lie. You can rate each report hit / partial / miss, and we calibrate on it. Honesty is our only moat.',
-    cta_h: 'Stop guessing alone',
-    cta_sub: '30 seconds. See your free compatibility preview.',
-    cta_btn: 'Get a free reading',
-    foot_tag: 'Eastern Synastry · Relationship Insight',
-    foot_disc: 'Meridian Sync offers relationship insight through an Eastern-culture lens for reflection and self-awareness. Not medical, legal, or investment advice.',
-    mine_h: 'My readings', mine_new: '+ New reading',
-    mine_empty_t: 'No readings yet', mine_empty_d: 'Read your compatibility — 30 seconds.', mine_empty_btn: 'Start your first reading',
-    new_h: 'New reading',
-    unlock_h: 'Unlock full report', unlock_credits: 'You have {n} free unlocks',
-    unlock_btn_free: 'Unlock with 1 credit (free)', unlock_btn_pay: 'Get unlock credits',
-    unlock_member: 'Members unlock unlimited',
-    rep_strengths: 'Your strengths', rep_frictions: 'Where you\u2019ll clash', rep_dynamic: 'Your dynamic',
-    rep_advice: 'What to do next', rep_timing: 'Next 6 months',
-    rep_share: 'Create a share card', rep_feedback_q: 'Did this report speak to you?',
-    fb_hit: 'Spot on', fb_part: 'Partly', fb_miss: 'Missed', fb_thanks: 'Thanks — this makes us more accurate.',
-    acct_h: 'Privacy & Data',
-    lang_toggle: '中文',
-  },
-};
+// ---- i18n (dictionaries live in ./i18n.js; 8 locales, real-time switch) ----
 function t(k, vars) {
   let s = (I18N[state.lang] && I18N[state.lang][k]) || (I18N.zh[k]) || k;
-  if (vars) for (const [kk, vv] of Object.entries(vars)) s = s.replace(`{${kk}}`, vv);
+  if (vars) for (const [kk, vv] of Object.entries(vars)) s = String(s).split(`{${kk}}`).join(vv);
   return s;
 }
-function setLang(l) { state.lang = l; localStorage.setItem('mrd_lang', l); render(); }
+function localeMeta(code) { return LOCALES.find((l) => l.code === code) || LOCALES[0]; }
+function prices() { return PRICES[state.lang] || PRICES.zh; }
+function applyDir() {
+  const m = localeMeta(state.lang);
+  document.documentElement.lang = m.htmlLang;
+  document.documentElement.dir = m.dir;
+}
+function setLang(l) {
+  if (!I18N[l]) return;
+  state.lang = l;
+  localStorage.setItem('mrd_lang', l);
+  applyDir();
+  render();
+}
+// Sanitize a possibly-stale stored lang, then set <html lang/dir> on first paint.
+if (!I18N[state.lang]) state.lang = 'zh';
+applyDir();
 
 const REL_TYPES = ['romance', 'crush', 'reunion', 'marriage', 'friendship'];
 const REL_LABELS = () => ({ romance: t('rel_romance'), crush: t('rel_crush'), reunion: t('rel_reunion'), marriage: t('rel_marriage'), friendship: t('rel_friendship') });
@@ -196,13 +75,40 @@ function go(name) { location.hash = name; }
 window.addEventListener('hashchange', render);
 
 // ---- nav ----
+// 8-language switcher: a compact button that opens a dropdown of native names.
+// Real-time — setLang() re-renders instantly and flips <html dir> for RTL locales.
+function langSwitcher() {
+  const cur = localeMeta(state.lang);
+  const menu = el('div', { class: 'lang-menu' },
+    ...LOCALES.map((lc) => el('button', {
+      class: 'lang-opt' + (lc.code === state.lang ? ' on' : ''),
+      onclick: (e) => { e.stopPropagation(); setLang(lc.code); },
+    }, el('span', { class: 'lo-native' }, lc.native), lc.code === state.lang ? el('span', { class: 'lo-check' }, '✓') : null)));
+  const wrap = el('div', { class: 'lang-switch' },
+    el('button', {
+      class: 'lang-btn', 'aria-label': t('lang_name'),
+      onclick: (e) => { e.stopPropagation(); wrap.classList.toggle('open'); },
+    },
+      el('span', { class: 'lb-globe', html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>' }),
+      el('span', { class: 'lb-code' }, cur.native),
+      el('span', { class: 'lb-caret' }, '▾')),
+    menu);
+  // close when clicking elsewhere
+  setTimeout(() => {
+    const close = () => wrap.classList.remove('open');
+    document.addEventListener('click', close, { once: true, capture: false });
+  }, 0);
+  return wrap;
+}
+
 function navBar() {
-  const langBtn = el('button', { class: 'lang-btn', onclick: () => setLang(state.lang === 'zh' ? 'en' : 'zh') }, t('lang_toggle'));
+  const langBtn = langSwitcher();
   const links = state.user
     ? [el('a', { href: '#mine' }, t('nav_mine')), el('a', { href: '#new' }, t('nav_new')),
        el('a', { href: '#account' }, t('nav_account')), el('a', { href: '#pricing' }, t('nav_pricing')),
        langBtn, el('a', { class: 'btn btn-ghost', onclick: logout }, t('nav_logout'))]
-    : [el('a', { href: '#how' }, t('nav_how')), el('a', { href: '#stories' }, t('nav_stories')),
+    : [el('a', { href: '#why' }, t('nav_why')), el('a', { href: '#how' }, t('nav_how')),
+       el('a', { href: '#stories' }, t('nav_stories')),
        el('a', { href: '#pricing' }, t('nav_pricing')), el('a', { href: '#faq' }, t('nav_faq')),
        langBtn, el('a', { class: 'btn btn-ghost', onclick: () => openAuth('login') }, t('nav_login')),
        el('a', { class: 'btn btn-gold', onclick: () => openAuth('register') }, t('nav_start'))];
@@ -317,7 +223,7 @@ function tryFunnel() {
   const btn = el('button', { class: 'btn btn-gold btn-lg', style: 'width:100%' }, t('try_btn'));
   btn.addEventListener('click', async () => {
     const a = blockA._read(), b = blockB._read();
-    if (!a.date || !b.date) { toast(state.lang === 'zh' ? '请填两个人的出生日期' : 'Please enter both birth dates'); return; }
+    if (!a.date || !b.date) { toast(t('err_need_dates')); return; }
     state.lastForm = { relType, a, b };
     btn.disabled = true; btn.textContent = t('try_loading');
     try {
@@ -346,10 +252,10 @@ function previewCard(preview) {
     el('div', { class: 'lt-lock' }, '🔒 ' + t('preview_locked')),
     el('div', { class: 'lt-hint' }, t('preview_unlock_hint')),
     el('div', { class: 'lt-counts' },
-      el('span', {}, (lc.strengths || 0) + ' ' + (state.lang === 'zh' ? '条优势' : 'strengths')),
-      el('span', {}, (lc.frictions || 0) + ' ' + (state.lang === 'zh' ? '个坑' : 'frictions')),
-      el('span', {}, (lc.advice || 0) + ' ' + (state.lang === 'zh' ? '条建议' : 'advice')),
-      el('span', {}, (lc.timing || 6) + ' ' + (state.lang === 'zh' ? '个月运势' : 'months'))),
+      el('span', {}, (lc.strengths || 0) + t('lc_strengths')),
+      el('span', {}, (lc.frictions || 0) + t('lc_frictions')),
+      el('span', {}, (lc.advice || 0) + t('lc_advice')),
+      el('span', {}, (lc.timing || 6) + t('lc_months'))),
     state.user
       ? el('button', { class: 'btn btn-gold', style: 'width:100%', onclick: saveAndOpen }, t('preview_save'))
       : el('div', {},
@@ -384,10 +290,10 @@ function featureRow(idx, tKey, dKey, mock) {
 
 function mockCardHero() {
   return syncCard({
-    overall: 82, keyword: state.lang === 'zh' ? '互相成就的缘分' : 'A relationship that lifts you both',
-    dims: { [state.lang === 'zh' ? '吸引力' : 'Attraction']: 88, [state.lang === 'zh' ? '契合度' : 'Fit']: 79, [state.lang === 'zh' ? '滋养度' : 'Nourish']: 84, [state.lang === 'zh' ? '共鸣度' : 'Resonance']: 76, [state.lang === 'zh' ? '长久度' : 'Longevity']: 81, [state.lang === 'zh' ? '稳定度' : 'Stability']: 80 },
-    hook: state.lang === 'zh' ? 'TA的「水」润你的「木」——你在TA身边会慢慢舒展' : 'Their Water nourishes your Wood — you unfold beside them',
-    meta: { nameA: state.lang === 'zh' ? '你' : 'You', nameB: 'TA' },
+    overall: 82, keyword: t('mock_kw'),
+    dims: { [t('dim_attraction')]: 88, [t('dim_fit')]: 79, [t('dim_nourish')]: 84, [t('dim_resonance')]: 76, [t('dim_longevity')]: 81, [t('dim_stability')]: 80 },
+    hook: t('mock_hook'),
+    meta: { nameA: t('label_you'), nameB: t('label_ta') },
   }, { variant: 'hero' });
 }
 
@@ -403,11 +309,12 @@ function storiesSection() {
 }
 
 function pricingSection() {
+  const px = prices();
   const plans = [
-    { code: 'free', n: 'plan_free_n', p: 'plan_free_p', d: 'plan_free_d', cta: 'plan_cta_free', action: () => openAuth('register') },
-    { code: 'report_lite', n: 'plan_lite_n', p: 'plan_lite_p', d: 'plan_lite_d', cta: 'plan_cta', pop: true, action: () => upgrade('report_lite') },
-    { code: 'sync_monthly', n: 'plan_month_n', p: 'plan_month_p', d: 'plan_month_d', cta: 'plan_cta', action: () => upgrade('sync_monthly') },
-    { code: 'report_marriage', n: 'plan_marry_n', p: 'plan_marry_p', d: 'plan_marry_d', cta: 'plan_cta', action: () => upgrade('report_marriage') },
+    { code: 'free', n: 'plan_free_n', price: px.free, d: 'plan_free_d', cta: 'plan_cta_free', action: () => openAuth('register') },
+    { code: 'report_lite', n: 'plan_lite_n', price: px.lite, d: 'plan_lite_d', cta: 'plan_cta', pop: true, action: () => upgrade('report_lite') },
+    { code: 'sync_monthly', n: 'plan_month_n', price: px.month, d: 'plan_month_d', cta: 'plan_cta', action: () => upgrade('sync_monthly') },
+    { code: 'report_marriage', n: 'plan_marry_n', price: px.marry, d: 'plan_marry_d', cta: 'plan_cta', action: () => upgrade('report_marriage') },
   ];
   return el('section', { class: 'section pricing', id: 'pricing' },
     el('div', { class: 'wrap' },
@@ -417,9 +324,10 @@ function pricingSection() {
         ...plans.map((pl) => el('div', { class: 'plan reveal' + (pl.pop ? ' pop' : '') },
           pl.pop ? el('div', { class: 'plan-badge' }, t('plan_pop')) : null,
           el('div', { class: 'plan-name' }, t(pl.n)),
-          el('div', { class: 'plan-price' }, t(pl.p)),
+          el('div', { class: 'plan-price' }, pl.price),
           el('div', { class: 'plan-desc' }, t(pl.d)),
-          el('button', { class: 'btn ' + (pl.pop ? 'btn-gold' : 'btn-line'), style: 'width:100%;margin-top:14px', onclick: pl.action }, t(pl.cta)))))));
+          el('button', { class: 'btn ' + (pl.pop ? 'btn-gold' : 'btn-line'), style: 'width:100%;margin-top:14px', onclick: pl.action }, t(pl.cta))))),
+      el('p', { class: 'plan-guarantee reveal' }, '✓ ' + t('plan_guarantee'))));
 }
 
 function faqSection() {
@@ -453,6 +361,34 @@ function footer() {
       el('div', { class: 'foot-legal' }, '© ' + new Date().getFullYear() + ' Meridian Sync')));
 }
 
+// trust bar — the four promises, placed right under the hero for conversion.
+function trustBar() {
+  const items = [
+    ['📜', 'trust_1'], ['🔍', 'trust_2'], ['🚫', 'trust_3'], ['🔒', 'trust_4'],
+  ];
+  return el('div', { class: 'trust-bar reveal' },
+    el('div', { class: 'wrap trust-inner' },
+      ...items.map(([ic, k]) => el('div', { class: 'trust-item' },
+        el('span', { class: 'trust-ic' }, ic), el('span', {}, t(k))))));
+}
+
+// why-us differentiation grid — honesty as the moat.
+function whySection() {
+  const cards = [
+    ['🎯', 'why1_t', 'why1_d'], ['🧭', 'why2_t', 'why2_d'],
+    ['🕊️', 'why3_t', 'why3_d'], ['📈', 'why4_t', 'why4_d'],
+  ];
+  return el('section', { class: 'section why', id: 'why' },
+    el('div', { class: 'wrap' },
+      el('h2', { class: 'section-title reveal' }, t('why_h')),
+      el('p', { class: 'section-sub reveal' }, t('why_sub')),
+      el('div', { class: 'why-grid' },
+        ...cards.map(([ic, tk, dk]) => el('div', { class: 'why-card reveal' },
+          el('div', { class: 'why-ic' }, ic),
+          el('h3', {}, t(tk)),
+          el('p', {}, t(dk)))))));
+}
+
 route('home', () => {
   app().append(navBar());
   const hero = el('section', { class: 'hero' },
@@ -481,25 +417,25 @@ route('home', () => {
 
   const funnel = el('section', { class: 'section funnel' }, el('div', { class: 'wrap narrow' }, tryFunnel()));
 
-  app().append(hero, funnel, problem, how, storiesSection(), pricingSection(), faqSection(), ctaSection(), footer());
+  app().append(hero, trustBar(), funnel, problem, whySection(), how, storiesSection(), pricingSection(), faqSection(), ctaSection(), footer());
   setTimeout(observeReveals, 30);
 });
 
 function mockTiming() {
-  const months = [['本月', 'high', '适合表白'], ['+1', 'steady', '平稳'], ['+2', 'caution', '需冷静'], ['+3', 'high', '关系升温'], ['+4', 'steady', '平稳'], ['+5', 'high', '谈重要事']];
+  const months = [['mt_m0', 'high', 'mt_n0'], ['mt_m1', 'steady', 'mt_n1'], ['mt_m2', 'caution', 'mt_n2'], ['mt_m3', 'high', 'mt_n3'], ['mt_m4', 'steady', 'mt_n4'], ['mt_m5', 'high', 'mt_n5']];
   return el('div', { class: 'mock-timing' },
-    el('div', { class: 'mt-title' }, state.lang === 'zh' ? '未来 6 个月运势' : 'Next 6 months'),
+    el('div', { class: 'mt-title' }, t('rep_timing')),
     el('div', { class: 'timing-grid' },
-      ...months.map(([m, lv, note]) => el('div', { class: 'timing-cell ' + lv },
-        el('div', { class: 'tc-m' }, m), el('div', { class: 'tc-dot' }), el('div', { class: 'tc-n' }, state.lang === 'zh' ? note : note)))));
+      ...months.map(([mKey, lv, nKey]) => el('div', { class: 'timing-cell ' + lv },
+        el('div', { class: 'tc-m' }, t(mKey)), el('div', { class: 'tc-dot' }), el('div', { class: 'tc-n' }, t(nKey))))));
 }
 function mockShare() {
   return el('div', { class: 'mock-share' },
-    syncCard({ overall: 76, keyword: state.lang === 'zh' ? '细水长流的缘分' : 'A slow-burning bond',
-      dims: null, hook: null, meta: { nameA: state.lang === 'zh' ? '你' : 'You', nameB: 'TA' } }, { variant: 'mini' }),
+    syncCard({ overall: 76, keyword: t('mock_kw2'),
+      dims: null, hook: null, meta: { nameA: t('label_you'), nameB: t('label_ta') } }, { variant: 'mini' }),
     el('div', { class: 'ms-actions' },
-      el('span', { class: 'ms-chip' }, '💬 ' + (state.lang === 'zh' ? '发给 TA' : 'Send to them')),
-      el('span', { class: 'ms-chip' }, '👭 ' + (state.lang === 'zh' ? '发闺蜜群' : 'Group chat'))));
+      el('span', { class: 'ms-chip' }, '💬 ' + t('card_send_ta')),
+      el('span', { class: 'ms-chip' }, '👭 ' + t('card_send_group'))));
 }
 
 // ============================================================
@@ -509,18 +445,16 @@ async function upgrade(plan) {
   if (!state.user) { openAuth('register'); return; }
   try {
     await API.call('/billing/checkout', { method: 'POST', body: { plan, provider: 'mock' } });
-    toast(state.lang === 'zh'
-      ? '已创建订单（待支付）。真实支付需接入商户凭证；权益仅在支付回调验证后开通。'
-      : 'Order created (pending). Real payment requires a merchant integration; access is granted only after a verified webhook.');
-  } catch (e) { toast(e.message || (state.lang === 'zh' ? '暂不可用' : 'Unavailable')); }
+    toast(t('checkout_pending'));
+  } catch (e) { toast(e.message || t('common_unavailable')); }
 }
 
 function openAuth(mode) {
   const overlay = el('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
   const errBox = el('div', { class: 'err', style: 'display:none' });
   const emailI = el('input', { type: 'email', placeholder: 'you@example.com', autocomplete: 'email' });
-  const passI = el('input', { type: 'password', placeholder: state.lang === 'zh' ? '至少 6 位' : 'at least 6 chars', autocomplete: 'current-password' });
-  const nameI = el('input', { type: 'text', placeholder: state.lang === 'zh' ? '如何称呼你' : 'Your name' });
+  const passI = el('input', { type: 'password', placeholder: t('auth_pass_ph'), autocomplete: 'current-password' });
+  const nameI = el('input', { type: 'text', placeholder: t('auth_name_ph') });
   const submit = async () => {
     errBox.style.display = 'none';
     try {
@@ -537,17 +471,17 @@ function openAuth(mode) {
   };
   const modal = el('div', { class: 'modal', style: 'position:relative' },
     el('span', { class: 'close', onclick: () => overlay.remove() }, '×'),
-    el('h3', {}, mode === 'register' ? (state.lang === 'zh' ? '注册 · 送 3 次完整报告' : 'Sign up · 3 free reports') : (state.lang === 'zh' ? '欢迎回来' : 'Welcome back')),
-    el('div', { class: 'muted' }, mode === 'register' ? (state.lang === 'zh' ? '注册后立即解锁你的合盘报告' : 'Unlock your reading right after sign-up') : (state.lang === 'zh' ? '登录继续' : 'Log in to continue')),
+    el('h3', {}, mode === 'register' ? t('auth_reg_title') : t('auth_login_title')),
+    el('div', { class: 'muted' }, mode === 'register' ? t('auth_reg_sub') : t('auth_login_sub')),
     errBox,
-    mode === 'register' ? el('div', { class: 'field' }, el('label', {}, state.lang === 'zh' ? '昵称' : 'Name'), nameI) : null,
-    el('div', { class: 'field' }, el('label', {}, state.lang === 'zh' ? '邮箱' : 'Email'), emailI),
-    el('div', { class: 'field' }, el('label', {}, state.lang === 'zh' ? '密码' : 'Password'), passI),
+    mode === 'register' ? el('div', { class: 'field' }, el('label', {}, t('auth_name')), nameI) : null,
+    el('div', { class: 'field' }, el('label', {}, t('auth_email')), emailI),
+    el('div', { class: 'field' }, el('label', {}, t('auth_pass')), passI),
     el('button', { class: 'btn btn-gold', style: 'width:100%;margin-top:6px', onclick: submit },
-      mode === 'register' ? (state.lang === 'zh' ? '创建账户' : 'Create account') : (state.lang === 'zh' ? '登录' : 'Log in')),
-    el('div', { class: 'switch' }, mode === 'register' ? (state.lang === 'zh' ? '已有账户？' : 'Have an account?') : (state.lang === 'zh' ? '还没有账户？' : 'No account?'),
+      mode === 'register' ? t('auth_create') : t('auth_login')),
+    el('div', { class: 'switch' }, mode === 'register' ? t('auth_have') : t('auth_no'),
       el('a', { onclick: () => { overlay.remove(); openAuth(mode === 'register' ? 'login' : 'register'); } },
-        mode === 'register' ? (state.lang === 'zh' ? ' 去登录' : ' Log in') : (state.lang === 'zh' ? ' 免费注册' : ' Sign up free'))));
+        mode === 'register' ? t('auth_go_login') : t('auth_go_reg'))));
   passI.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   overlay.append(modal); document.body.append(overlay);
   setTimeout(() => (mode === 'register' ? nameI : emailI).focus(), 50);
@@ -589,7 +523,7 @@ function relCard(r) {
       el('div', { class: 'rc-key' }, r.keyword || ''),
       el('div', { class: 'rc-meta' },
         el('span', { class: 'rc-tag' }, labels[r.rel_type] || r.rel_type),
-        el('span', { class: 'rc-status ' + (r.locked ? 'locked' : 'open') }, r.locked ? (state.lang === 'zh' ? '未解锁' : 'Locked') : (state.lang === 'zh' ? '已解锁' : 'Unlocked')))),
+        el('span', { class: 'rc-status ' + (r.locked ? 'locked' : 'open') }, r.locked ? t('rc_locked') : t('rc_open')))),
     el('div', { class: 'rc-arrow' }, '›'));
 }
 
@@ -612,7 +546,7 @@ route('report', async () => {
   const wrap = el('div', { class: 'wrap narrow app-wrap' });
   app().append(wrap);
   const id = (location.hash.split('/')[1] || '').split('?')[0];
-  wrap.append(el('div', { class: 'loading' }, state.lang === 'zh' ? '载入报告中…' : 'Loading…'));
+  wrap.append(el('div', { class: 'loading' }, t('rep_loading')));
   try {
     const data = await API.call('/sync/reports/' + id);
     wrap.innerHTML = '';
@@ -650,7 +584,7 @@ async function doUnlock(id) {
     try { const { user } = await API.call('/me'); state.user = user; } catch {}
     render();
   } catch (e) {
-    if (e.status === 402) { toast(state.lang === 'zh' ? '免费额度已用完，去获取报告或成为会员' : 'Out of free unlocks — get a report or membership'); go('pricing'); }
+    if (e.status === 402) { toast(t('unlock_out')); go('pricing'); }
     else toast(e.message);
   }
 }
@@ -689,7 +623,7 @@ function fullReportView(id, data) {
   }
   const actions = el('div', { class: 'report-actions' },
     el('button', { class: 'btn btn-gold', onclick: () => shareReport(id, rep) }, '🔗 ' + t('rep_share')),
-    el('button', { class: 'btn btn-line', onclick: () => go('mine') }, state.lang === 'zh' ? '返回我的合盘' : 'Back to my readings'));
+    el('button', { class: 'btn btn-line', onclick: () => go('mine') }, t('rep_back')));
   return el('div', { class: 'report' }, card, ...blocks,
     rep.disclaimer ? el('p', { class: 'report-disc' }, rep.disclaimer) : null,
     actions, feedbackBox(id, data.relationship_id || rep.relationship_id));
@@ -699,7 +633,7 @@ async function shareReport(id, rep) {
   try {
     const { slug, url } = await API.call('/sync/share', { method: 'POST', body: { report_id: id } });
     const link = url || (location.origin + '/c/' + slug);
-    try { await navigator.clipboard.writeText(link); toast(state.lang === 'zh' ? '缘分卡片链接已复制，去发给 TA 吧' : 'Card link copied — go share it'); }
+    try { await navigator.clipboard.writeText(link); toast(t('card_copied')); }
     catch { toast(link); }
     window.open('/c/' + slug, '_blank');
   } catch (e) { toast(e.message); }
@@ -738,10 +672,10 @@ route('c', async () => {
         syncCard({ overall: card.overall, keyword: card.keyword, dims: card.dims, hook: null,
           meta: { nameA: t('label_you'), nameB: t('label_ta') } }, { variant: 'share' }),
         el('div', { class: 'card-cta' },
-          el('h3', {}, state.lang === 'zh' ? '也想看看你俩的缘分？' : 'Curious about your own?'),
-          el('p', {}, state.lang === 'zh' ? '30 秒免费测一次，注册即送 3 次完整报告。' : '30-second free reading, 3 full reports on sign-up.'),
-          el('button', { class: 'btn btn-gold btn-lg', onclick: () => go('home') }, state.lang === 'zh' ? '免费测我的缘分 →' : 'Get my free reading →'))));
-  } catch (e) { wrap.innerHTML = ''; wrap.append(el('div', { class: 'err' }, state.lang === 'zh' ? '卡片不存在或已失效' : 'Card not found')); }
+          el('h3', {}, t('sv_curious_t')),
+          el('p', {}, t('sv_curious_d')),
+          el('button', { class: 'btn btn-gold btn-lg', onclick: () => go('home') }, t('sv_curious_btn')))));
+  } catch (e) { wrap.innerHTML = ''; wrap.append(el('div', { class: 'err' }, t('sv_notfound'))); }
   window.scrollTo(0, 0);
 });
 
@@ -759,17 +693,17 @@ route('account', async () => {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const a = el('a', { href: URL.createObjectURL(blob), download: 'meridian-my-data.json' }); a.click();
     } catch (e) { toast(e.message); }
-  } }, state.lang === 'zh' ? '导出我的全部数据 (JSON)' : 'Export all my data (JSON)');
+  } }, t('acct_export'));
   const delBtn = el('button', { class: 'btn btn-danger', onclick: async () => {
-    if (!confirm(state.lang === 'zh' ? '确定永久注销账户？你的合盘、报告、卡片将被彻底删除，不可恢复。' : 'Permanently delete your account? All readings will be erased.')) return;
-    if (!confirm(state.lang === 'zh' ? '再次确认：此操作不可撤销。' : 'Confirm again: this cannot be undone.')) return;
-    try { await API.call('/me', { method: 'DELETE' }); API.setToken(null); state.user = null; toast(state.lang === 'zh' ? '账户已注销' : 'Account deleted'); go('home'); }
+    if (!confirm(t('acct_confirm1'))) return;
+    if (!confirm(t('acct_confirm2'))) return;
+    try { await API.call('/me', { method: 'DELETE' }); API.setToken(null); state.user = null; toast(t('acct_deleted')); go('home'); }
     catch (e) { toast(e.message); }
-  } }, state.lang === 'zh' ? '永久注销账户' : 'Delete account');
+  } }, t('acct_delete'));
   wrap.append(
     el('div', { class: 'acct-row' },
-      el('h3', {}, state.lang === 'zh' ? '数据可携与注销' : 'Data portability & deletion'),
-      el('p', { class: 'muted' }, state.lang === 'zh' ? '你拥有完整的数据主权。出生信息仅用于合盘，分享卡片不含隐私。' : 'You own your data fully. Birth info is used only for calculation; share cards contain no privacy.'),
+      el('h3', {}, t('acct_title')),
+      el('p', { class: 'muted' }, t('acct_desc')),
       el('div', { class: 'acct-actions' }, exportBtn, delBtn)));
 });
 
@@ -780,7 +714,7 @@ function render() {
   const name = raw.split('?')[0].split('/')[0] || 'home';
   const authGated = ['mine', 'new', 'report', 'account'];
   if (authGated.includes(name) && !state.user) { openAuth('login'); go('home'); return; }
-  if (['how', 'stories', 'pricing', 'faq'].includes(name)) {
+  if (['why', 'how', 'stories', 'pricing', 'faq'].includes(name)) {
     routes['home']();
     setTimeout(() => document.getElementById(name)?.scrollIntoView({ behavior: 'smooth' }), 60);
     return;

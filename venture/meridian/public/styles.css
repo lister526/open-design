@@ -34,8 +34,8 @@
   --violet:#6d5bd0;
 
   /* ---- type ---- */
-  --sans:"Inter","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  --serif:"Playfair Display","Noto Serif SC","Songti SC",Georgia,serif;
+  --sans:"Inter","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans JP","Noto Sans KR","Noto Sans Devanagari","Noto Naskh Arabic",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --serif:"Playfair Display","Noto Serif SC","Songti SC","Noto Sans JP","Noto Sans KR","Noto Sans Devanagari","Noto Naskh Arabic",Georgia,serif;
   --mono:"JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,monospace;
 
   /* ---- radius / shadow (soft, Stripe-like) ---- */
@@ -711,3 +711,71 @@ footer{border-top:1px solid var(--line);padding:56px 0 40px;color:var(--text-3);
 .acct-row{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:24px}
 .acct-row h3{font-family:var(--serif);font-size:18px;font-weight:600;margin-bottom:8px}
 .acct-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+
+/* ============================================================
+   i18n additions: 8-language switcher, trust bar, why-us grid,
+   pricing guarantee, and full RTL (Arabic) support.
+   ============================================================ */
+
+/* ---- language switcher dropdown ---- */
+.lang-switch{position:relative;display:inline-flex}
+.lang-switch .lang-btn{display:inline-flex;align-items:center;gap:6px}
+.lang-switch .lb-globe{display:inline-flex;color:var(--text-2)}
+.lang-switch:hover .lb-globe{color:var(--gold)}
+.lang-switch .lb-code{font-weight:500;max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lang-switch .lb-caret{font-size:9px;opacity:.6;transition:transform .18s var(--ease)}
+.lang-switch.open .lb-caret{transform:rotate(180deg)}
+.lang-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:172px;background:var(--surface);
+  border:1px solid var(--line-strong);border-radius:14px;box-shadow:0 18px 44px -18px rgba(30,22,10,.32);
+  padding:6px;display:none;flex-direction:column;gap:2px;z-index:60}
+.lang-switch.open .lang-menu{display:flex;animation:lm-in .16s var(--ease)}
+@keyframes lm-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.lang-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  padding:9px 12px;border:0;background:transparent;border-radius:9px;cursor:pointer;
+  font-size:14px;color:var(--text);text-align:start;transition:.14s var(--ease)}
+.lang-opt:hover{background:var(--gold-soft);color:var(--gold)}
+.lang-opt.on{color:var(--gold);font-weight:600}
+.lang-opt .lo-check{color:var(--gold);font-size:12px}
+
+/* ---- trust bar ---- */
+.trust-bar{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface-2,#faf7f1)}
+.trust-inner{display:flex;flex-wrap:wrap;gap:14px 34px;justify-content:center;align-items:center;padding:16px 0}
+.trust-item{display:inline-flex;align-items:center;gap:9px;font-size:13.5px;color:var(--text-2);font-weight:500}
+.trust-ic{font-size:16px;filter:saturate(.9)}
+@media(max-width:760px){.trust-inner{gap:10px 20px}.trust-item{font-size:12.5px}}
+
+/* ---- why-us differentiation grid ---- */
+.section.why .why-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:30px}
+.why-card{padding:26px 24px;background:var(--surface);border:1px solid var(--line);border-radius:18px;
+  transition:.22s var(--ease)}
+.why-card:hover{border-color:var(--gold);box-shadow:0 16px 40px -22px rgba(120,90,30,.35);transform:translateY(-2px)}
+.why-ic{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;font-size:22px;
+  background:var(--gold-soft);margin-bottom:14px}
+.why-card h3{font-family:var(--serif);font-size:19px;margin:0 0 8px;color:var(--text)}
+.why-card p{margin:0;font-size:14.5px;line-height:1.72;color:var(--text-2)}
+@media(max-width:760px){.section.why .why-grid{grid-template-columns:1fr;gap:14px}}
+
+/* ---- pricing guarantee line ---- */
+.plan-guarantee{margin:26px auto 0;text-align:center;font-size:13.5px;color:var(--text-2);
+  max-width:600px;line-height:1.6}
+
+/* ============================================================
+   RTL (Arabic) — mirror layout, keep numbers/scores LTR.
+   ============================================================ */
+[dir="rtl"] body,[dir="rtl"]{text-align:right}
+[dir="rtl"] .eyebrow::before{margin-left:0}
+[dir="rtl"] .lang-menu{right:auto;left:0}
+[dir="rtl"] .lang-opt{text-align:start}
+[dir="rtl"] .rc-arrow{transform:scaleX(-1)}
+[dir="rtl"] .sc-amp,[dir="rtl"] .dim-track,[dir="rtl"] .pv-bar{direction:ltr}
+[dir="rtl"] .dim-fill{left:auto;right:0}
+[dir="rtl"] .sc-ring,[dir="rtl"] .rc-score,[dir="rtl"] .plan-price,
+[dir="rtl"] .sc-ring-inner b,[dir="rtl"] .tc-m{direction:ltr;unicode-bidi:isolate}
+[dir="rtl"] .timing-grid{direction:rtl}
+[dir="rtl"] .fr-num,[dir="rtl"] .foot-legal{direction:ltr;unicode-bidi:isolate}
+[dir="rtl"] .adv-ic{margin-left:0}
+[dir="rtl"] .switch a{margin-right:4px}
+[dir="rtl"] .hero-cta,[dir="rtl"] .trust-item,[dir="rtl"] .ms-actions{flex-direction:row-reverse}
+[dir="rtl"] .close{right:auto;left:16px}
+/* keep the brand mark + latin small-caps readable */
+[dir="rtl"] .brand small{direction:ltr;display:inline-block}
