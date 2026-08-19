@@ -1,0 +1,17 @@
+page { background: #0b0d12; color: #eef1f6; font-size: 28rpx; }
+.container { padding: 28rpx; }
+.card { background: #12151d; border: 1rpx solid #242a37; border-radius: 20rpx; padding: 28rpx; margin-bottom: 24rpx; }
+.brand { font-size: 40rpx; font-weight: 800; color: #5b8cff; }
+.muted { color: #9aa4b2; }
+.btn { background: linear-gradient(135deg,#5b8cff,#8a6bff); color: #fff; border-radius: 16rpx; padding: 22rpx; text-align: center; font-weight: 600; margin-top: 20rpx; }
+.btn.ghost { background: transparent; border: 1rpx solid #242a37; color: #eef1f6; }
+.pill { display: inline-block; padding: 10rpx 22rpx; border: 1rpx solid #242a37; border-radius: 999rpx; margin: 8rpx; background:#0e1017; }
+.pill.on { background: linear-gradient(135deg,#5b8cff,#8a6bff); border-color: transparent; color:#fff; }
+.input { background:#0e1017; border:1rpx solid #242a37; border-radius:16rpx; padding:20rpx; margin-top:12rpx; color:#eef1f6; }
+.label { color:#9aa4b2; font-size:24rpx; margin-top:20rpx; }
+.h1 { font-size:44rpx; font-weight:800; line-height:1.3; margin:16rpx 0; }
+.tag { font-size:22rpx; padding:4rpx 12rpx; border-radius:8rpx; background:#0e1017; border:1rpx solid #242a37; color:#9aa4b2; margin-right:8rpx; }
+.row { display:flex; align-items:center; }
+.spread { justify-content: space-between; }
+.credits { color:#f5b544; font-weight:700; }
+.asset { white-space: pre-wrap; }

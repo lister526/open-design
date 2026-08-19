@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Wanka",
+    "slug": "wanka",
+    "scheme": "wanka",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0d12",
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.wanka.app" },
+    "android": { "package": "com.wanka.app" },
+    "extra": {
+      "apiBaseUrl": "http://localhost:8788"
+    },
+    "plugins": []
+  }
+}

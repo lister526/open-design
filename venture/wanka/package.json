@@ -1,0 +1,21 @@
+{
+  "name": "wanka",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wanka — AI-native marketing/product content creator network for cross-border & small merchants. Web + WeChat Mini Program + mobile, with AppLovin/Meta ad hooks.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --ip 0.0.0.0 --port 8788",
+    "migrate": "wrangler d1 migrations apply wanka-db --local",
+    "migrate:remote": "wrangler d1 migrations apply wanka-db --remote",
+    "seed": "wrangler d1 execute wanka-db --local --file=./migrations/0002_seed_templates.sql",
+    "test": "bash tests/smoke.sh",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "wrangler": "^4.86.0"
+  }
+}

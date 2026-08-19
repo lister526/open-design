@@ -1,0 +1,20 @@
+<view class="container">
+  <view class="brand" style="font-size:34rpx">模板网络</view>
+  <view class="muted">别人做出的爆款配方，一键套用到你的产品。使用与成交越多，排名越靠前。</view>
+
+  <view style="margin:20rpx 0">
+    <view wx:for="{{kindOpts}}" wx:key="*this" class="pill {{kind===item?'on':''}}" data-v="{{item}}" bindtap="setKind">{{kindLabel[item]}}</view>
+  </view>
+
+  <view wx:for="{{list}}" wx:key="id" class="card">
+    <view class="row spread">
+      <text style="font-weight:600">{{item.title}}</text>
+      <text class="tag">{{kindLabel[item.kind]}}</text>
+    </view>
+    <view class="muted" style="margin:8rpx 0">{{item.preview}}</view>
+    <view class="row spread">
+      <text class="muted">🔥 {{item.uses}} · 🏆 {{item.wins}}</text>
+      <view class="pill on" data-i="{{index}}" bindtap="use">用它生成</view>
+    </view>
+  </view>
+</view>
