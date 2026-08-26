@@ -44,12 +44,26 @@ if (cfg.ads.applovin.enabled) {
 Add **Meta Audience Network** as a mediation adapter inside the AppLovin dashboard so
 Meta demand fills the same MAX ad units (recommended over integrating Meta AN directly).
 
-### Server-side reward callback (grant credits securely)
-AppLovin calls your S2S reward URL. Add a route (production):
-```
-POST /api/ads/applovin/reward   (verify signature) -> UPDATE users SET credits = credits + 5
-```
-Contract is defined in `src/ads.js → rewardedCreditsContract()` (5 credits per rewarded view).
+### Reward flow (IMPLEMENTED)
+
+There are **two** endpoints, already live in `src/index.js`:
+
+1. **`POST /api/ads/reward`** (client, optimistic) — the mobile app calls this right after a
+   rewarded ad completes (`src/lib/ads.js → rewardedAd()` → `api.claimRewardedCredits()`).
+   Grants a fixed **5 credits** server-side (never trusts a client-sent amount) and is
+   **daily-capped at 50 credits/user** for anti-abuse.
+
+2. **`GET /api/ads/applovin/s2s`** (AppLovin server-to-server, **authoritative**) — configure
+   this URL in the AppLovin dashboard → *Account → Rewarded Callback*:
+   ```
+   https://YOUR_DOMAIN/api/ads/applovin/s2s?user_id={USER_ID}&amount={AMOUNT}&event_id={EVENT_ID}&secret=YOUR_SECRET
+   ```
+   - Pass the logged-in Wanka user id as AppLovin's custom `user_id`.
+   - Verified with a shared secret: `wrangler secret put APPLOVIN_S2S_SECRET`.
+   - **Idempotent** by `event_id` (won't double-grant on retries).
+
+The reward amount contract is defined in `src/ads.js → rewardedCreditsContract()`
+(5 credits per rewarded view). To change it, edit that one function.
 
 ---
 

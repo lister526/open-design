@@ -62,7 +62,8 @@ echo "  （可选）如需微信登录，设置："
 echo "     $WR secret put WX_APPID"
 echo "     $WR secret put WX_SECRET"
 echo ""
-echo "  （可选）如需 AppLovin 广告，在 wrangler.toml [vars] 里填 APPLOVIN_SDK_KEY 等。"
+echo "  （可选）如需 AppLovin 广告，在 wrangler.toml [vars] 里填 APPLOVIN_SDK_KEY 等，"
+echo "  并设置服务端回调密钥：  $WR secret put APPLOVIN_S2S_SECRET"
 
 # --- 4. 部署 ---
 echo ""
