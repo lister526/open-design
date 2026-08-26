@@ -34,3 +34,5 @@ APPLOVIN_INTERSTITIAL_UNIT = ""
 APPLOVIN_BANNER_UNIT = ""
 META_AN_PLACEMENT = ""
 META_PIXEL_ID = ""
+# APPLOVIN_S2S_SECRET is a SECRET — set via `wrangler secret put APPLOVIN_S2S_SECRET`
+# (shared secret to verify AppLovin's server-to-server rewarded callback).

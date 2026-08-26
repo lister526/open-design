@@ -46,3 +46,8 @@ export const publishAsset = (id) => req(`/assets/${id}/publish`, { method: 'POST
 export const creatorEarnings = () => req('/creator/earnings');
 export const checkout = (plan) => req('/billing/checkout', { method: 'POST', body: { plan } });
 export const metrics = () => req('/metrics');
+// --- account (Apple-mandatory) ---
+export const exportData = () => req('/me/export');
+export const deleteAccount = () => req('/me', { method: 'DELETE', body: { confirm: true } });
+// --- rewarded ads → credits (AppLovin S2S is authoritative; this is the client claim) ---
+export const claimRewardedCredits = (b) => req('/ads/reward', { method: 'POST', body: b || {} });

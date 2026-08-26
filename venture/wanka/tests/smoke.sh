@@ -52,6 +52,26 @@ chk "$(echo "$P" | j '.plan')" "pro" "upgraded to pro"
 echo "== metrics (North-Star) =="
 M=$(curl -s "$BASE/api/metrics"); chk "$([ "$(echo "$M" | j '.generations')" -ge 1 ] && echo ok)" "ok" "generations counted"; chk "$([ "$(echo "$M" | j '.reported_wins')" -ge 1 ] && echo ok)" "ok" "wins counted"
 
+echo "== production hardening: deep health =="
+H=$(curl -s "$BASE/api/health"); chk "$(echo "$H" | j '.db')" "ok" "health reports db ok"
+
+echo "== rewarded ad -> credits =="
+RWE="rw_$(date +%s%N)@t.com"
+RWT=$(curl -s -X POST "$BASE/api/auth/register" -H 'Content-Type: application/json' -d "{\"email\":\"$RWE\",\"password\":\"pw123456\",\"role\":\"merchant\"}" | j '.token')
+RW=$(curl -s -X POST "$BASE/api/ads/reward" -H "Authorization: Bearer $RWT" -H 'Content-Type: application/json' -d '{}')
+chk "$(echo "$RW" | j '.granted')" "5" "rewarded ad grants 5 credits"
+chk "$(echo "$RW" | j '.credits')" "25" "credits 20 -> 25 after reward"
+
+echo "== data export (GDPR / Apple 5.1.1) =="
+EX=$(curl -s "$BASE/api/me/export" -H "Authorization: Bearer $RWT")
+chk "$(echo "$EX" | j '.user.email')" "$RWE" "export returns user data"
+
+echo "== account deletion (Apple 5.1.1(v)) =="
+DEL=$(curl -s -X DELETE "$BASE/api/me" -H "Authorization: Bearer $RWT" -H 'Content-Type: application/json' -d '{"confirm":true}')
+chk "$(echo "$DEL" | j '.deleted')" "true" "account permanently deleted"
+GONE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/me" -H "Authorization: Bearer $RWT")
+chk "$GONE" "401" "deleted user token no longer valid"
+
 echo ""
 echo "==== $pass passed, $fail failed ===="
 [ "$fail" -eq 0 ]

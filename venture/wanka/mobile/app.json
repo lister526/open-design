@@ -1,17 +1,43 @@
 {
   "expo": {
-    "name": "Wanka",
+    "name": "Wanka 万卡",
     "slug": "wanka",
     "scheme": "wanka",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0b0d12",
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.wanka.app" },
-    "android": { "package": "com.wanka.app" },
-    "extra": {
-      "apiBaseUrl": "http://localhost:8788"
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "backgroundColor": "#0b0d12",
+      "resizeMode": "contain"
     },
-    "plugins": []
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wanka.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSUserTrackingUsageDescription": "本 App 使用广告标识以展示更相关的广告，并让你通过观看广告免费获取创作额度。",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.wanka.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0b0d12"
+      },
+      "permissions": ["INTERNET", "com.google.android.gms.permission.AD_ID"]
+    },
+    "extra": {
+      "apiBaseUrl": "https://wanka.app",
+      "applovinSdkKey": "",
+      "applovinRewardedUnit": "",
+      "eas": { "projectId": "" }
+    },
+    "plugins": ["expo-constants"]
   }
 }

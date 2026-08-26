@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { uid, now, hashPassword, verifyPassword, signToken, verifyToken } from './util.js';
 import { generateSet, generateFromTemplate, supportedKinds } from './generator.js';
-import { adConfig } from './ads.js';
+import { adConfig, rewardedCreditsContract } from './ads.js';
 
 const app = new Hono();
 
@@ -167,6 +167,53 @@ app.delete('/api/me', async (c) => {
   ]);
   await logEvent(c.env, null, 'account_deleted', {});
   return j(c, { ok: true, deleted: true });
+});
+
+// ---------- rewarded ads → credits ----------
+// Client-side optimistic claim after a rewarded ad is shown. The AUTHORITATIVE grant is
+// the AppLovin server-to-server (S2S) callback below; this endpoint is anti-abuse limited
+// (daily cap) so a lost/blocked S2S callback still lets honest users get their reward.
+app.post('/api/ads/reward', async (c) => {
+  const u = await currentUser(c);
+  if (!u) return j(c, { error: 'unauthorized' }, 401);
+  const contract = rewardedCreditsContract();
+  const amount = contract.reward_amount; // fixed server-side; never trust client amount
+  const DAILY_CAP = 50; // max credits/day via rewarded ads (anti-abuse)
+  const dayStart = Math.floor(Date.now() / 86400000) * 86400000;
+  const row = await c.env.DB.prepare(
+    "SELECT COALESCE(SUM(CAST(json_extract(meta,'$.amount') AS INTEGER)),0) AS granted FROM events WHERE user_id=? AND name='ad_reward' AND created_at>=?",
+  ).bind(u.id, dayStart).first().catch(() => ({ granted: 0 }));
+  const granted = Number(row?.granted || 0);
+  if (granted >= DAILY_CAP) return j(c, { error: 'daily_cap_reached', credits: u.credits, cap: DAILY_CAP }, 429);
+  const grant = Math.min(amount, DAILY_CAP - granted);
+  await c.env.DB.prepare('UPDATE users SET credits=credits+?, updated_at=? WHERE id=?').bind(grant, now(), u.id).run();
+  await logEvent(c.env, u.id, 'ad_reward', { amount: grant, network: 'applovin', source: 'client' });
+  const fresh = await c.env.DB.prepare('SELECT credits FROM users WHERE id=?').bind(u.id).first();
+  return j(c, { ok: true, granted: grant, credits: fresh?.credits ?? u.credits });
+});
+
+// AppLovin MAX server-to-server rewarded callback (authoritative).
+// Configure this URL in AppLovin dashboard: https://YOUR_DOMAIN/api/ads/applovin/s2s
+// Verify with a shared secret (APPLOVIN_S2S_SECRET) passed as ?secret= or header.
+app.get('/api/ads/applovin/s2s', async (c) => {
+  const secret = c.env.APPLOVIN_S2S_SECRET;
+  const given = c.req.query('secret') || c.req.header('x-applovin-secret');
+  if (secret && given !== secret) return j(c, { error: 'bad_secret' }, 403);
+  // AppLovin sends custom user id + reward info as query params.
+  const userId = c.req.query('user_id') || c.req.query('idfa') || '';
+  const amount = Number(c.req.query('amount')) || rewardedCreditsContract().reward_amount;
+  const eventId = c.req.query('event_id') || '';
+  if (!userId) return j(c, { error: 'user_id_required' }, 400);
+  // Idempotency: skip if we already processed this event_id.
+  if (eventId) {
+    const dup = await c.env.DB.prepare("SELECT id FROM events WHERE name='ad_reward_s2s' AND json_extract(meta,'$.event_id')=?").bind(eventId).first().catch(() => null);
+    if (dup) return c.text('OK'); // already granted
+  }
+  const user = await c.env.DB.prepare('SELECT id,credits FROM users WHERE id=?').bind(userId).first();
+  if (!user) return j(c, { error: 'user_not_found' }, 404);
+  await c.env.DB.prepare('UPDATE users SET credits=credits+?, updated_at=? WHERE id=?').bind(amount, now(), userId).run();
+  await logEvent(c.env, userId, 'ad_reward_s2s', { amount, event_id: eventId, network: 'applovin' });
+  return c.text('OK'); // AppLovin expects a 200 with body
 });
 
 // ---------- projects ----------
