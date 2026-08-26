@@ -15,3 +15,4 @@ page { background: #0b0d12; color: #eef1f6; font-size: 28rpx; }
 .spread { justify-content: space-between; }
 .credits { color:#f5b544; font-weight:700; }
 .asset { white-space: pre-wrap; }
+.hr { height:1rpx; background:#242a37; margin:24rpx 0; }
