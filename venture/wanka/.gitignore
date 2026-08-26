@@ -4,3 +4,6 @@ node_modules/
 .mf/
 dist/
 *.log
+core
+core.*
+*.core

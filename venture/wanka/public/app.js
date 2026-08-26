@@ -77,27 +77,86 @@ function go(r) { location.hash = r; }
 // ---------- screens ----------
 function homeScreen() {
   return el('div', {},
+    // ---- HERO ----
     el('section', { class: 'hero container' },
+      el('div', { class: 'hero-badge' }, t('hero_badge')),
       el('div', { class: 'eyebrow' }, t('hero_eyebrow')),
       el('h1', { html: t('hero_title') }),
       el('p', { class: 'sub' }, t('hero_sub')),
       el('div', { class: 'row center', style: 'justify-content:center' },
-        el('a', { class: 'btn', href: '#/studio' }, t('hero_cta')),
-        el('a', { class: 'btn ghost', href: '#/templates' }, t('hero_cta2'))),
+        el('a', { class: 'btn lg', href: '#/studio' }, t('hero_cta')),
+        el('a', { class: 'btn ghost lg', href: '#/templates' }, t('hero_cta2'))),
       el('div', { class: 'stat' },
         stat(t('stat1_n'), t('stat1_l')),
         stat(t('stat2_n'), t('stat2_l')),
         stat(t('stat3_n'), t('stat3_l'))),
     ),
-    el('section', { class: 'container', style: 'padding:20px 20px 60px' },
+
+    // ---- SOCIAL PROOF strip ----
+    el('section', { class: 'container proof' },
+      el('div', { class: 'muted center', style: 'margin-bottom:14px;font-size:13px;letter-spacing:.5px;text-transform:uppercase' }, t('social_proof_title')),
+      el('div', { class: 'grid g4' },
+        stat(t('sp1_n'), t('sp1_l')),
+        stat(t('sp2_n'), t('sp2_l')),
+        stat(t('sp3_n'), t('sp3_l')),
+        stat(t('sp4_n'), t('sp4_l')))),
+
+    // ---- WHY (value props) ----
+    el('section', { class: 'container', style: 'padding:20px 20px 20px' },
       el('div', { class: 'grid g3' },
         why('🎯', t('why1_t'), t('why1_d')),
         why('🌐', t('why2_t'), t('why2_d')),
         why('🔁', t('why3_t'), t('why3_d')))),
+
+    // ---- HOW IT WORKS ----
+    el('section', { class: 'container', style: 'padding:40px 20px 20px' },
+      el('h2', { class: 'center', style: 'font-size:26px' }, t('how_title')),
+      el('div', { class: 'grid g3', style: 'margin-top:20px' },
+        why('📝', t('how1_t'), t('how1_d')),
+        why('⚡', t('how2_t'), t('how2_d')),
+        why('🚀', t('how3_t'), t('how3_d')))),
+
+    // ---- TESTIMONIALS ----
+    el('section', { class: 'container', style: 'padding:40px 20px 20px' },
+      el('h2', { class: 'center', style: 'font-size:26px' }, t('testi_title')),
+      el('div', { class: 'grid g3', style: 'margin-top:20px' },
+        testimonial(t('testi1'), t('testi1_by')),
+        testimonial(t('testi2'), t('testi2_by')),
+        testimonial(t('testi3'), t('testi3_by')))),
+
+    // ---- FAQ ----
+    el('section', { class: 'container', style: 'padding:40px 20px 20px' },
+      el('h2', { class: 'center', style: 'font-size:26px' }, t('faq_title')),
+      el('div', { class: 'grid g2', style: 'margin-top:20px' },
+        faqItem(t('faq1_q'), t('faq1_a')),
+        faqItem(t('faq2_q'), t('faq2_a')),
+        faqItem(t('faq3_q'), t('faq3_a')),
+        faqItem(t('faq4_q'), t('faq4_a')))),
+
+    // ---- FINAL CTA + viral share ----
+    el('section', { class: 'container', style: 'padding:40px 20px 70px' },
+      el('div', { class: 'cta-final' },
+        el('h2', { style: 'font-size:28px;margin:0 0 8px' }, t('final_cta_title')),
+        el('p', { class: 'muted', style: 'margin:0 0 20px' }, t('final_cta_sub')),
+        el('div', { class: 'row center', style: 'justify-content:center' },
+          el('a', { class: 'btn lg', href: '#/studio' }, t('final_cta_btn')),
+          el('button', { class: 'btn ghost lg', onclick: shareSite }, '🔗 ' + t('share'))))),
   );
 }
 const stat = (n, l) => el('div', { class: 'center' }, el('div', { class: 'n' }, n), el('div', { class: 'muted' }, l));
 const why = (icon, tt, dd) => el('div', { class: 'card' }, el('div', { style: 'font-size:28px' }, icon), el('h2', {}, tt), el('p', { class: 'muted' }, dd));
+const testimonial = (quote, by) => el('div', { class: 'card' }, el('p', { style: 'font-size:15px;line-height:1.6' }, quote), el('div', { class: 'muted', style: 'margin-top:10px;font-size:13px' }, by));
+const faqItem = (q, a) => el('div', { class: 'card' }, el('b', {}, q), el('p', { class: 'muted', style: 'margin:8px 0 0' }, a));
+
+async function shareSite() {
+  const url = location.origin + '/' + (S.user ? ('#/?ref=' + encodeURIComponent(S.user.email || '')) : '');
+  const shareData = { title: 'Wanka 万卡 · AI 营销内容创作网络', text: t('invite_earn'), url };
+  try {
+    if (navigator.share) { await navigator.share(shareData); return; }
+    await navigator.clipboard.writeText(url);
+    toast(t('share_copied'));
+  } catch (e) { try { await navigator.clipboard.writeText(url); toast(t('share_copied')); } catch { toast(url); } }
+}
 
 // ---- Studio: the single-player generation core ----
 const studioState = { product: '', category: '3c', audience: '', selling: '', langs: ['zh', 'en'], kinds: ['ad_copy', 'video_script', 'image_brief', 'listing'], assets: [] };

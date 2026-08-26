@@ -57,3 +57,14 @@ nav.top .container{display:flex;align-items:center;gap:16px;height:60px}
 .hr{height:1px;background:var(--line);margin:22px 0}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
 .credits{font-weight:700;color:var(--gold)}
+/* ---- conversion landing additions ---- */
+.g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:760px){.g4{grid-template-columns:1fr 1fr}}
+.btn.lg{padding:15px 28px;font-size:16px;border-radius:12px}
+.hero-badge{display:inline-block;padding:7px 16px;border-radius:999px;background:rgba(91,140,255,.12);border:1px solid rgba(91,140,255,.32);color:var(--brand);font-size:13px;font-weight:600;margin-bottom:14px}
+.proof{padding:14px 20px 30px}
+.proof .card,.proof .n{}
+.proof .grid .center{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.proof .n{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.cta-final{background:linear-gradient(135deg,rgba(91,140,255,.14),rgba(138,107,255,.14));border:1px solid rgba(138,107,255,.3);border-radius:20px;padding:44px 24px;text-align:center}
+[dir="rtl"] .stat,[dir="rtl"] .row{direction:rtl}

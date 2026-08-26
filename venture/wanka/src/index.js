@@ -9,7 +9,25 @@ import { generateSet, generateFromTemplate, supportedKinds } from './generator.j
 import { adConfig } from './ads.js';
 
 const app = new Hono();
-app.use('/api/*', cors());
+
+// CORS — allow the SPA, mini-program webview, and native apps to call the API.
+app.use('/api/*', cors({
+  origin: (origin) => origin || '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
+}));
+
+// Global error boundary — the API must NEVER return an unhandled 500 to a store reviewer.
+app.onError((err, c) => {
+  console.error('api_error', err?.message || err);
+  return c.json({ error: 'server_error', message: 'Something went wrong. Please try again.' }, 500);
+});
+app.notFound((c) => {
+  // Only API 404s return JSON; page 404s fall through to the SPA handler below.
+  if (c.req.path.startsWith('/api/')) return c.json({ error: 'not_found' }, 404);
+  return c.text('Not found', 404);
+});
 
 // ---------- helpers ----------
 const j = (c, data, status = 200) => c.json(data, status);
@@ -35,7 +53,13 @@ async function logEvent(env, userId, name, meta) {
 const PLAN_CREDITS = { free: 20, starter: 300, pro: 1500, team: 5000 };
 
 // ---------- health ----------
-app.get('/api/health', (c) => j(c, { ok: true, service: 'wanka', env: c.env.APP_ENV || 'dev', ts: now() }));
+app.get('/api/health', async (c) => {
+  // Deep health check: verifies the DB binding actually responds (for uptime monitors).
+  let db = 'unknown';
+  try { await c.env.DB.prepare('SELECT 1').first(); db = 'ok'; } catch { db = 'error'; }
+  const healthy = db === 'ok';
+  return c.json({ ok: healthy, service: 'wanka', env: c.env.APP_ENV || 'dev', db, ts: now() }, healthy ? 200 : 503);
+});
 
 // ---------- config (public): kinds, langs, ad SDK config, brand ----------
 app.get('/api/config', (c) => j(c, {
@@ -80,6 +104,69 @@ app.get('/api/me', async (c) => {
   const u = await currentUser(c);
   if (!u) return j(c, { error: 'unauthorized' }, 401);
   return j(c, { user: { id: u.id, email: u.email, display_name: u.display_name, role: u.role, plan: u.plan, credits: u.credits, lang: u.lang } });
+});
+
+// WeChat Mini Program login: exchange wx.login `code` for a session (App Store / mini-program native auth).
+// Requires WX_APPID + WX_SECRET env. Creates/loads a user keyed by the WeChat openid.
+app.post('/api/auth/wx', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  if (!b.code) return j(c, { error: 'code_required' }, 400);
+  const appid = c.env.WX_APPID;
+  const secret = c.env.WX_SECRET;
+  if (!appid || !secret) return j(c, { error: 'wx_not_configured', hint: 'set WX_APPID and WX_SECRET secrets' }, 501);
+  // Exchange code -> openid via WeChat API
+  let openid;
+  try {
+    const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=${secret}&js_code=${encodeURIComponent(b.code)}&grant_type=authorization_code`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!data.openid) return j(c, { error: 'wx_exchange_failed', detail: data.errmsg || null }, 400);
+    openid = data.openid;
+  } catch (e) { return j(c, { error: 'wx_upstream_error' }, 502); }
+  // find or create user
+  let u = await c.env.DB.prepare('SELECT * FROM users WHERE email=?').bind(`wx_${openid}@wechat.local`).first();
+  if (!u) {
+    const id = uid('usr');
+    const ts = now();
+    await c.env.DB.prepare(
+      'INSERT INTO users (id,email,password_hash,display_name,role,plan,credits,lang,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    ).bind(id, `wx_${openid}@wechat.local`, '', b.nickname || '微信用户', 'merchant', 'free', PLAN_CREDITS.free, 'zh', ts, ts).run();
+    await logEvent(c.env, id, 'signup', { via: 'wechat' });
+    u = await c.env.DB.prepare('SELECT * FROM users WHERE id=?').bind(id).first();
+  }
+  const token = await signToken({ sub: u.id }, c.env.JWT_SECRET || 'dev-insecure-secret');
+  return j(c, { token, user: { id: u.id, email: u.email, display_name: u.display_name, role: u.role, plan: u.plan, credits: u.credits, lang: u.lang } });
+});
+
+// Data export (GDPR / Apple 5.1.1) — user downloads all their data.
+app.get('/api/me/export', async (c) => {
+  const u = await currentUser(c);
+  if (!u) return j(c, { error: 'unauthorized' }, 401);
+  const projects = await c.env.DB.prepare('SELECT * FROM projects WHERE user_id=?').bind(u.id).all();
+  const assets = await c.env.DB.prepare('SELECT * FROM assets WHERE user_id=?').bind(u.id).all();
+  return j(c, {
+    user: { id: u.id, email: u.email, display_name: u.display_name, role: u.role, plan: u.plan, credits: u.credits, created_at: u.created_at },
+    projects: projects.results || [],
+    assets: assets.results || [],
+    exported_at: now(),
+  });
+});
+
+// Account deletion (Apple Guideline 5.1.1(v) — MANDATORY for apps with account creation).
+// Permanently removes the user and all their data.
+app.delete('/api/me', async (c) => {
+  const u = await currentUser(c);
+  if (!u) return j(c, { error: 'unauthorized' }, 401);
+  const b = await c.req.json().catch(() => ({}));
+  if (b.confirm !== true && b.confirm !== 'DELETE') return j(c, { error: 'confirm_required', hint: 'send {"confirm": true}' }, 400);
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM assets WHERE user_id=?').bind(u.id),
+    c.env.DB.prepare('DELETE FROM projects WHERE user_id=?').bind(u.id),
+    c.env.DB.prepare('DELETE FROM template_usage WHERE user_id=?').bind(u.id),
+    c.env.DB.prepare('DELETE FROM users WHERE id=?').bind(u.id),
+  ]);
+  await logEvent(c.env, null, 'account_deleted', {});
+  return j(c, { ok: true, deleted: true });
 });
 
 // ---------- projects ----------
