@@ -1,0 +1,44 @@
+<view class="container">
+  <view class="brand" style="font-size:34rpx">我的</view>
+
+  <block wx:if="{{user}}">
+    <view class="card">
+      <view style="font-weight:600">{{user.display_name}}</view>
+      <view class="muted">{{user.email}}</view>
+      <view class="row spread" style="margin-top:16rpx">
+        <text class="tag">{{user.role}}</text>
+        <text class="tag">{{user.plan}}</text>
+        <text class="credits">⚡ {{user.credits}}</text>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="label">隐私与数据</view>
+      <view class="btn ghost" bindtap="exportData">导出我的数据</view>
+      <view class="btn ghost" bindtap="logout">退出登录</view>
+      <view class="hr"></view>
+      <view class="btn" style="background:#ff6b6b" bindtap="deleteAccount">永久注销账户</view>
+      <view class="muted" style="font-size:22rpx;margin-top:12rpx">支持在小程序内直接注销账户并删除全部数据。</view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="card">
+      <view class="btn" bindtap="wxLogin">微信一键登录</view>
+      <view class="muted" style="font-size:22rpx;text-align:center;margin:16rpx 0">或使用邮箱</view>
+      <view>
+        <view class="pill {{mode==='register'?'on':''}}" data-m="register" bindtap="setMode">注册</view>
+        <view class="pill {{mode==='login'?'on':''}}" data-m="login" bindtap="setMode">登录</view>
+      </view>
+      <view wx:if="{{mode==='register'}}" style="margin-top:12rpx">
+        <view class="pill {{role==='merchant'?'on':''}}" data-r="merchant" bindtap="setRole">我是商家</view>
+        <view class="pill {{role==='creator'?'on':''}}" data-r="creator" bindtap="setRole">我是创作者</view>
+      </view>
+      <view class="label">邮箱</view>
+      <input class="input" value="{{email}}" bindinput="onEmail" placeholder="you@shop.com" placeholder-style="color:#5a6474" />
+      <view class="label">密码</view>
+      <input class="input" password value="{{password}}" bindinput="onPassword" placeholder="••••••••" placeholder-style="color:#5a6474" />
+      <view class="btn" bindtap="submit">{{mode==='register'?'注册':'登录'}}</view>
+    </view>
+  </block>
+</view>

@@ -1,0 +1,32 @@
+<view class="container">
+  <view class="row spread">
+    <view class="brand" style="font-size:34rpx">创作台</view>
+    <view class="credits">⚡ {{credits}}</view>
+  </view>
+
+  <view class="card">
+    <view class="label">产品名称</view>
+    <input class="input" value="{{product}}" bindinput="onProduct" placeholder="例如：便携榨汁杯" placeholder-style="color:#5a6474" />
+    <view class="label">目标人群 / 市场</view>
+    <input class="input" value="{{audience}}" bindinput="onAudience" placeholder="例如：欧美健身年轻女性" placeholder-style="color:#5a6474" />
+    <view class="label">卖点（每行一个）</view>
+    <textarea class="input" value="{{selling}}" bindinput="onSelling" placeholder="便携&#10;30 秒出汁&#10;可水洗" placeholder-style="color:#5a6474" style="height:160rpx" />
+
+    <view class="label">目标语言</view>
+    <view>
+      <view wx:for="{{langOpts}}" wx:key="*this" class="pill {{langs.indexOf(item)>-1?'on':''}}" data-v="{{item}}" bindtap="toggleLang">{{item}}</view>
+    </view>
+
+    <view class="label">要生成的素材</view>
+    <view>
+      <view wx:for="{{kindOpts}}" wx:key="*this" class="pill {{kinds.indexOf(item)>-1?'on':''}}" data-v="{{item}}" bindtap="toggleKind">{{kindLabel[item]}}</view>
+    </view>
+
+    <view class="btn" bindtap="generate">{{loading ? '生成中…' : '生成成套素材'}}</view>
+  </view>
+
+  <view wx:for="{{assets}}" wx:key="index" class="card">
+    <view class="row"><text class="tag">{{kindLabel[item.kind]}}</text><text class="tag">{{item.lang}}</text></view>
+    <view class="asset" style="font-size:24rpx;margin-top:12rpx">{{item.text}}</view>
+  </view>
+</view>

@@ -1,0 +1,6 @@
+# Copy to .dev.vars and fill in. NEVER commit .dev.vars.
+JWT_SECRET=change-me-in-prod-please-use-a-long-random-string
+OPENAI_API_KEY=
+# Optional: override model / base url
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_BASE_URL=https://api.openai.com/v1

@@ -1,0 +1,21 @@
+{
+  "name": "meridian",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Meridian — Personal Decision OS. Structured decision workspace + optional Eastern-astrology cultural lens.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --ip 0.0.0.0 --port 8787",
+    "migrate": "wrangler d1 migrations apply meridian-db --local",
+    "migrate:remote": "wrangler d1 migrations apply meridian-db --remote",
+    "test:p0": "bash tests/p0_smoke.sh",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "lunar-javascript": "^1.7.7"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/studio/studio",
+    "pages/templates/templates",
+    "pages/account/account"
+  ],
+  "window": {
+    "navigationBarTitleText": "Wanka",
+    "navigationBarBackgroundColor": "#0b0d12",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0b0d12"
+  },
+  "tabBar": {
+    "color": "#9aa4b2",
+    "selectedColor": "#5b8cff",
+    "backgroundColor": "#12151d",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/home/home", "text": "首页" },
+      { "pagePath": "pages/studio/studio", "text": "创作台" },
+      { "pagePath": "pages/templates/templates", "text": "模板" },
+      { "pagePath": "pages/account/account", "text": "我的" }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
+}

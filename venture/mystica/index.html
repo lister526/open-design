@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mystica — Your Soul Blueprint, Decoded by East & West</title>
+<meta name="description" content="The only reading that fuses Western Astrology with 5,000-year-old Chinese BaZi. Discover the hidden pattern behind your love, wealth, and destiny.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:title" content="Mystica — Your Soul Blueprint, Decoded by East & West">
+<meta property="og:description" content="Western Astrology × Chinese BaZi. Discover the hidden pattern behind your love, wealth, and destiny.">
+<meta property="og:type" content="website">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500&family=Inter:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;500&family=Noto+Sans+JP:wght@300;500&family=Noto+Sans+KR:wght@300;500&family=Noto+Sans+Devanagari:wght@300;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --gold:#d4af6a; --deep:#0b0a1f; }
+  body{ font-family:'Inter','Noto Sans SC','Noto Sans JP','Noto Sans KR','Noto Sans Devanagari',sans-serif; background:var(--deep); color:#efe9ff; }
+  .serif{ font-family:'Cormorant Garamond','Noto Sans SC','Noto Sans JP','Noto Sans KR',serif; }
+  .gold{ color:var(--gold); } .bg-gold{ background:var(--gold); }
+  .starfield{ background:radial-gradient(ellipse at top,#241452 0%,#0b0a1f 55%,#05040f 100%); }
+  .glass{ background:rgba(255,255,255,.04); border:1px solid rgba(212,175,106,.25); backdrop-filter:blur(12px); }
+  .glow{ box-shadow:0 0 60px rgba(212,175,106,.25); }
+  .shimmer{ background:linear-gradient(90deg,#d4af6a,#f5e6b8,#d4af6a); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .locked{ filter:blur(6px); user-select:none; pointer-events:none; }
+  @keyframes twinkle{0%,100%{opacity:.2}50%{opacity:1}}
+  .star{ position:absolute; background:#fff; border-radius:50%; animation:twinkle 3s infinite; }
+  .fade-in{ opacity:0; transform:translateY(20px); transition:all .8s ease; }
+  .fade-in.show{ opacity:1; transform:none; }
+  select#langSel{ background:rgba(0,0,0,.4); }
+  .spin{ animation:sp 1s linear infinite; } @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body class="starfield min-h-screen overflow-x-hidden">
+<div id="stars" class="fixed inset-0 pointer-events-none z-0"></div>
+
+<nav class="relative z-10 flex items-center justify-between px-6 md:px-12 py-6 max-w-6xl mx-auto">
+  <div class="serif text-2xl gold tracking-wide">✦ Mystica</div>
+  <div class="flex items-center gap-3">
+    <select id="langSel" class="text-sm border border-[var(--gold)]/40 gold rounded-full px-3 py-2 outline-none cursor-pointer"></select>
+    <a href="#reading" data-i18n="nav_cta" class="text-sm border border-[var(--gold)] gold px-5 py-2 rounded-full hover:bg-gold hover:text-black transition">Get My Reading</a>
+  </div>
+</nav>
+
+<header class="relative z-10 max-w-4xl mx-auto text-center px-6 pt-16 pb-24">
+  <p data-i18n="hero_kicker" class="gold tracking-[0.3em] text-xs uppercase mb-6">Western Astrology × Chinese BaZi</p>
+  <h1 class="serif text-5xl md:text-7xl leading-tight mb-6">
+    <span data-i18n="hero_title_1">The reading that finally</span><br><span class="shimmer" data-i18n="hero_title_2">tells you the truth.</span>
+  </h1>
+  <p data-i18n-html="hero_sub" class="text-lg text-purple-200/80 max-w-2xl mx-auto mb-10 font-light"></p>
+  <a href="#reading" data-i18n="hero_btn" class="inline-block bg-gold text-black font-semibold px-10 py-4 rounded-full glow hover:scale-105 transition text-lg">Reveal My Soul Blueprint — Free</a>
+  <p data-i18n="hero_note" class="text-xs text-purple-300/50 mt-4">No sign-up · 60 seconds · 1,200,000+ charts decoded</p>
+</header>
+
+<section class="relative z-10 max-w-4xl mx-auto px-6 mb-20 fade-in">
+  <div class="flex flex-wrap justify-center gap-8 text-center opacity-70 text-sm">
+    <div><div class="serif text-3xl gold">4.9★</div><span data-i18n="proof_1">from 38,000 readings</span></div>
+    <div><div class="serif text-3xl gold">92%</div><span data-i18n="proof_2">said "eerily accurate"</span></div>
+    <div><div class="serif text-3xl gold">1 of 1</div><span data-i18n="proof_3">only East+West engine online</span></div>
+  </div>
+</section>
+
+<section id="reading" class="relative z-10 max-w-xl mx-auto px-6 mb-24 fade-in">
+  <div class="glass rounded-3xl p-8 md:p-10">
+    <h2 data-i18n="form_title" class="serif text-3xl text-center mb-2">Cast Your Chart</h2>
+    <p data-i18n="form_sub" class="text-center text-purple-200/60 text-sm mb-8">Enter your birth details. We keep them private.</p>
+    <form id="birthForm" class="space-y-5">
+      <div>
+        <label data-i18n="f_name" class="text-xs uppercase tracking-wider text-purple-300/70">Your Name</label>
+        <input name="name" type="text" placeholder="Aria" class="w-full mt-1 bg-black/30 border border-purple-400/20 rounded-xl px-4 py-3 focus:border-[var(--gold)] outline-none">
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <div><label data-i18n="f_year" class="text-xs uppercase tracking-wider text-purple-300/70">Year</label>
+          <input name="year" type="number" placeholder="1996" min="1920" max="2025" required class="w-full mt-1 bg-black/30 border border-purple-400/20 rounded-xl px-4 py-3 focus:border-[var(--gold)] outline-none"></div>
+        <div><label data-i18n="f_month" class="text-xs uppercase tracking-wider text-purple-300/70">Month</label>
+          <input name="month" type="number" placeholder="7" min="1" max="12" required class="w-full mt-1 bg-black/30 border border-purple-400/20 rounded-xl px-4 py-3 focus:border-[var(--gold)] outline-none"></div>
+        <div><label data-i18n="f_day" class="text-xs uppercase tracking-wider text-purple-300/70">Day</label>
+          <input name="day" type="number" placeholder="21" min="1" max="31" required class="w-full mt-1 bg-black/30 border border-purple-400/20 rounded-xl px-4 py-3 focus:border-[var(--gold)] outline-none"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs uppercase tracking-wider text-purple-300/70"><span data-i18n="f_hour">Birth Hour</span> <span data-i18n="f_hour_opt" class="text-purple-300/40 normal-case">(optional)</span></label>
+          <select name="hour" id="hourSel" class="w-full mt-1 bg-black/30 border border-purple-400/20 rounded-xl px-4 py-3 focus:border-[var(--gold)] outline-none"></select>
+        </div>
+        <div>
+          <label data-i18n="f_gender" class="text-xs uppercase tracking-wider text-purple-300/70">Gender</label>
+          <select name="gender" id="genderSel" class="w-full mt-1 bg-black/30 border border-purple-400/20 rounded-xl px-4 py-3 focus:border-[var(--gold)] outline-none"></select>
+        </div>
+      </div>
+      <button type="submit" data-i18n="form_btn" class="w-full bg-gold text-black font-semibold py-4 rounded-xl glow hover:scale-[1.02] transition text-lg">Reveal My Blueprint ✦</button>
+    </form>
+  </div>
+</section>
+
+<section id="result" class="relative z-10 max-w-2xl mx-auto px-6 mb-24 hidden">
+  <div class="glass rounded-3xl p-8 md:p-10">
+    <div id="resultContent"></div>
+
+    <div class="mt-8 text-center">
+      <button id="shareBtn" data-i18n="share_btn" class="text-sm border border-[var(--gold)]/50 gold px-6 py-2.5 rounded-full hover:bg-gold hover:text-black transition">Share my result</button>
+    </div>
+
+    <div class="mt-10 pt-8 border-t border-[var(--gold)]/20 text-center">
+      <p data-i18n="pay_kicker" class="gold tracking-widest text-xs uppercase mb-2">Your Full Blueprint Awaits</p>
+      <h3 data-i18n="pay_title" class="serif text-3xl mb-3">Unlock Your Complete Deep Reading</h3>
+      <p data-i18n="pay_sub" class="text-purple-200/70 text-sm max-w-md mx-auto mb-5"></p>
+
+      <!-- price anchor + scarcity -->
+      <div class="inline-flex items-center gap-3 mb-1">
+        <span data-price="deep-was" data-i18n="price_was" class="text-purple-300/40 line-through text-lg">$39</span>
+        <span data-price="deep-now" data-i18n="price_now" class="serif text-4xl gold">$19</span>
+        <span data-i18n="price_off" class="text-[10px] uppercase tracking-wider bg-gold text-black px-2 py-1 rounded-full">50% launch offer</span>
+      </div>
+      <p data-i18n="price_urgency" class="text-xs text-[#e8836b] mb-5">Launch price ends soon</p>
+
+      <div class="flex flex-col sm:flex-row gap-3 justify-center items-center">
+        <button onclick="Mystica.checkout('deep')" data-i18n="pay_one" class="bg-gold text-black font-semibold px-8 py-4 rounded-full glow hover:scale-105 transition">Unlock My Deep Reading</button>
+        <button onclick="Mystica.checkout('member')" data-i18n="pay_sub_btn" class="border border-[var(--gold)] gold px-8 py-4 rounded-full hover:bg-gold hover:text-black transition">Add daily guidance — $9/mo</button>
+      </div>
+      <p data-i18n="pay_note" class="text-xs text-purple-300/40 mt-3"></p>
+      <div class="flex flex-wrap justify-center gap-4 mt-4 text-xs text-purple-300/50">
+        <span data-i18n="guarantee">🛡️ 7-day money-back guarantee</span>
+        <span data-price="deep-methods" data-i18n="secure">🔒 Secure checkout</span>
+      </div>
+    </div>
+
+    <!-- deep report renders here after unlock/demo -->
+    <div id="deepReport" class="mt-10 hidden"></div>
+  </div>
+</section>
+
+<!-- SHOP MATRIX: 实物 + 复购产品矩阵 -->
+<section id="shop" class="relative z-10 max-w-5xl mx-auto px-6 mb-24 fade-in">
+  <h2 data-i18n="shop_title" class="serif text-4xl text-center mb-2">Carry your destiny with you</h2>
+  <p data-i18n="shop_sub" class="text-center text-purple-200/60 text-sm mb-10">Personalized to the exact element your chart is missing.</p>
+  <div id="shopGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+</section>
+
+<section class="relative z-10 max-w-5xl mx-auto px-6 mb-24 fade-in">
+  <h2 data-i18n="why_title" class="serif text-4xl text-center mb-12">Why Mystica reads deeper</h2>
+  <div class="grid md:grid-cols-3 gap-6">
+    <div class="glass rounded-2xl p-6"><div class="text-3xl mb-3">🌗</div><h3 data-i18n="why1_t" class="serif text-2xl mb-2 gold"></h3><p data-i18n="why1_b" class="text-sm text-purple-200/70"></p></div>
+    <div class="glass rounded-2xl p-6"><div class="text-3xl mb-3">🔮</div><h3 data-i18n="why2_t" class="serif text-2xl mb-2 gold"></h3><p data-i18n="why2_b" class="text-sm text-purple-200/70"></p></div>
+    <div class="glass rounded-2xl p-6"><div class="text-3xl mb-3">⏳</div><h3 data-i18n="why3_t" class="serif text-2xl mb-2 gold"></h3><p data-i18n="why3_b" class="text-sm text-purple-200/70"></p></div>
+  </div>
+</section>
+
+<!-- exit-intent / lead capture modal -->
+<div id="emailModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm px-6">
+  <div class="glass rounded-3xl p-8 max-w-md w-full text-center relative">
+    <button id="emailClose" class="absolute top-4 right-5 text-purple-300/50 hover:text-white text-xl">×</button>
+    <div class="text-4xl mb-3">✦</div>
+    <h3 data-i18n="email_title" class="serif text-2xl gold mb-2">Wait — want your reading saved?</h3>
+    <p data-i18n="email_sub" class="text-sm text-purple-200/70 mb-5"></p>
+    <form id="emailForm" class="space-y-3">
+      <input name="email" type="email" required data-i18n-ph="email_ph" placeholder="your@email.com" class="w-full bg-black/30 border border-purple-400/20 rounded-xl px-4 py-3 focus:border-[var(--gold)] outline-none text-center">
+      <button type="submit" data-i18n="email_btn" class="w-full bg-gold text-black font-semibold py-3 rounded-xl">Email me my reading</button>
+    </form>
+    <button id="emailSkip" data-i18n="email_skip" class="text-xs text-purple-300/40 mt-3 hover:text-purple-200">No thanks</button>
+  </div>
+</div>
+
+<footer class="relative z-10 border-t border-purple-400/10 py-10 text-center text-purple-300/40 text-sm">
+  <div class="serif gold text-xl mb-2">✦ Mystica</div>
+  <p data-i18n="foot_disc">For entertainment & self-reflection.</p>
+  <div class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">
+    <a href="/legal.html#about" class="hover:text-[var(--gold)]">About</a>
+    <a href="/legal.html#faq" class="hover:text-[var(--gold)]">FAQ</a>
+    <a href="/legal.html#privacy" class="hover:text-[var(--gold)]">Privacy</a>
+    <a href="/legal.html#terms" class="hover:text-[var(--gold)]">Terms</a>
+    <a href="/legal.html#refund" class="hover:text-[var(--gold)]">Refunds</a>
+    <a href="/legal.html#contact" class="hover:text-[var(--gold)]">Contact</a>
+  </div>
+  <p class="mt-3 text-xs">© <span id="yr"></span> Mystica. All rights reserved.</p>
+</footer>
+
+<canvas id="shareCanvas" width="1080" height="1350" class="hidden"></canvas>
+
+<script src="engine.js"></script>
+<script src="i18n.js"></script>
+<script src="pricing.js"></script>
+<script src="static-api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+name = "wanka"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets (the web SPA)
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# D1 database
+[[d1_databases]]
+binding = "DB"
+database_name = "wanka-db"
+database_id = "local-placeholder-id"
+migrations_dir = "migrations"
+
+# Observability — keep logs so you can debug production issues.
+[observability]
+enabled = true
+
+# Vars (non-secret, safe to commit). Secrets go via `wrangler secret put`.
+# Secrets to set at deploy: JWT_SECRET (required), OPENAI_API_KEY (optional, real AI),
+#                           WX_APPID / WX_SECRET (optional, WeChat login).
+[vars]
+APP_ENV = "production"
+BRAND_NAME = "Wanka"
+# Feature flags
+ENABLE_REAL_AI = "false"   # set "true" (and add OPENAI_API_KEY secret) to use the real model
+# --- Ad SDK config (client-safe). Fill these after your AppLovin/Meta accounts are approved. ---
+APPLOVIN_SDK_KEY = ""
+APPLOVIN_REWARDED_UNIT = ""
+APPLOVIN_INTERSTITIAL_UNIT = ""
+APPLOVIN_BANNER_UNIT = ""
+META_AN_PLACEMENT = ""
+META_PIXEL_ID = ""
+# APPLOVIN_S2S_SECRET is a SECRET — set via `wrangler secret put APPLOVIN_S2S_SECRET`
+# (shared secret to verify AppLovin's server-to-server rewarded callback).

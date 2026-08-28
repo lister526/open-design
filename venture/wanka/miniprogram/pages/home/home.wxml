@@ -1,0 +1,21 @@
+<view class="container">
+  <view class="brand">{{brand}}</view>
+  <view class="h1">3 分钟，把一个产品\n变成一整套会卖货的内容</view>
+  <view class="muted">上传产品 → AI 生成本地化图片指令、短视频脚本、广告文案与商品描述。好作品变模板，越用越强。</view>
+
+  <view class="btn" bindtap="goStudio">免费开始创作</view>
+  <view class="btn ghost" bindtap="goTemplates">逛模板网络</view>
+
+  <view class="card" style="margin-top:40rpx">
+    <view class="row spread"><text>🎯 结果导向</text></view>
+    <view class="muted">不是"好看"，是"卖得动"——每个模板都带真实使用与成交数据。</view>
+  </view>
+  <view class="card">
+    <view>🌐 全球本地化</view>
+    <view class="muted">中/英/日/韩/西/葡/阿/印/法，一次生成多市场投放。</view>
+  </view>
+  <view class="card">
+    <view>🔁 网络越用越强</view>
+    <view class="muted">好作品变模板被复用，创作者靠作品赚钱，平台越用越好用。</view>
+  </view>
+</view>

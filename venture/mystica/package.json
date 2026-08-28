@@ -1,0 +1,22 @@
+{
+  "name": "mystica",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "private": true,
+  "description": "Mystica — Western Astrology × Chinese BaZi paid-reading ecosystem.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "node build-seo.js",
+    "postinstall": "node build-seo.js || true"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "js-yaml": "^4.1.0",
+    "openai": "^4.67.0",
+    "stripe": "^22.3.0"
+  }
+}

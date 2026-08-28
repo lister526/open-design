@@ -1,0 +1,23 @@
+# Render 一键部署蓝图 (https://render.com)
+# 在 Render 后台: New → Blueprint → 连本仓库, 会自动读取此文件。
+services:
+  - type: web
+    name: mystica
+    runtime: node
+    plan: starter          # 起步可用 free / starter
+    buildCommand: npm install && node build-seo.js || npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PAYMENT_PROVIDER
+        value: demo         # 上线收款改成 lemonsqueezy
+      - key: OPENAI_API_KEY
+        sync: false         # 在后台手动填, 不进 Git
+      - key: LEMONSQUEEZY_API_KEY
+        sync: false
+      - key: LEMONSQUEEZY_STORE_ID
+        sync: false
+      - key: LEMONSQUEEZY_WEBHOOK_SECRET
+        sync: false

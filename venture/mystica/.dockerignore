@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+*.log
+server.log
+leads.jsonl
+.env
+.env.local
+.git
+.gitignore
+.wrangler
+dist
